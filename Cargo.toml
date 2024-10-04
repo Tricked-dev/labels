@@ -1,0 +1,9 @@
+[package]
+name = "labels"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tiny-skia = "0.7"
+minifb = { version = "0.17", default-features = false, features = ["x11"] }
+ab_glyph = "0.2.28"
