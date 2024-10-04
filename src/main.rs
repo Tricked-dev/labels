@@ -3,7 +3,8 @@ use std::time::Instant;
 use ab_glyph::{point, Glyph, Point, ScaleFont};
 use ab_glyph::{Font, FontArc};
 use minifb::{Key, Scale, Window, WindowOptions};
-use tiny_skia::{Paint, PathBuilder, Pixmap, PremultipliedColorU8, Transform};
+use rustyline::DefaultEditor;
+use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PremultipliedColorU8, Transform};
 
 use ab_glyph::PxScale;
 
@@ -47,7 +48,7 @@ pub fn layout_paragraph<F, SF>(
     }
 }
 
-fn draw_text(pixmap: &mut Pixmap, text: &str, x: f32, y: f32) {
+fn draw_text(pixmap: &mut Pixmap, text: &str, posx: u32, posy: u32) {
     let font_data: &[u8] = include_bytes!("../BerkeleyMonoTrial-Regular.otf");
     let font = FontArc::try_from_slice(font_data).unwrap();
 
@@ -91,7 +92,7 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, x: f32, y: f32) {
         let img_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
         glyph.draw(|x, y, v| {
             let w = pixmap.width();
-            let pos = (img_left + x) as usize + (img_top + y) as usize as usize * w as usize;
+            let pos = (img_left + x + posx) as usize + (img_top + y + posy) as usize * w as usize;
             let px = pixmap.pixels()[pos];
 
             let alpha = px.alpha().saturating_add((v * 255.0) as u8);
@@ -114,51 +115,34 @@ fn main() {
 
     // Create a window
     let mut window = Window::new(
-        "Tiny-skia + minifb Example",
+        "H",
         width as usize,
         height as usize,
         WindowOptions {
             resize: false,
             scale: Scale::X1,
+            borderless: true,
             ..WindowOptions::default()
         },
     )
     .unwrap_or_else(|e| {
         panic!("{}", e);
     });
-    let start_time = Instant::now();
+
+    let mut rl = DefaultEditor::new().unwrap();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        let elapsed = start_time.elapsed();
-        let seconds = elapsed.as_secs_f32();
+        let Ok(line) = rl.readline("> ") else {
+            continue;
+        };
 
-        // let red = (seconds.sin() * 127.0 + 128.0) as u8;
-        // let green = (seconds.cos() * 127.0 + 128.0) as u8;
-        // let blue = ((seconds.sin() * seconds.cos()) * 127.0 + 128.0) as u8;
+        println!("{}", line);
+        //clear pixmap make everything black
+        pixmap.fill(Color::from_rgba8(0, 0, 0, 0));
+        // pixmap.
 
-        // let mut path_builder = PathBuilder::new();
-        // // path_builder.push_circle(200.0, 200.0, 100.0);
-        // path_builder.push_rect(0.0, 0.0, 200.0, 200.0);
-        // let path = path_builder.finish().unwrap();
+        draw_text(&mut pixmap, "Hello, world!", 10, 10);
 
-        // let mut paint = Paint::default();
-        // paint.set_color_rgba8(red, green, blue, 255); // Gradient color
-
-        // pixmap.fill_path(
-        //     &path,
-        //     &paint,
-        //     tiny_skia::FillRule::Winding,
-        //     Transform::identity(),
-        //     None,
-        // );
-
-        draw_text(
-            &mut pixmap,
-            "Hello, world!",
-            10.0,
-            10.0,
-            (255, 255, 255, 255),
-        );
         let buffer: Vec<u32> = pixmap
             .data()
             .chunks(4)
