@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use ab_glyph::PxScale;
 use ab_glyph::{point, Glyph, Point, ScaleFont};
 use ab_glyph::{Font, FontArc};
@@ -7,7 +5,7 @@ use image_webp::WebPDecoder;
 use minifb::{Key, Scale, Window, WindowOptions};
 use once_cell::sync::Lazy;
 use rustyline::DefaultEditor;
-use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PremultipliedColorU8, Transform};
+use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 
 static BG: Lazy<PremultipliedColorU8> =
     Lazy::new(|| PremultipliedColorU8::from_rgba(0, 0, 0, 0).unwrap());
@@ -97,6 +95,7 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, posx: u32, posy: u32) {
             let alpha = px.alpha().saturating_add((v * 255.0) as u8);
             let write = alpha > 128;
             if !write {
+                // pixmap.pixels_mut()[pos] = *BG;
                 return;
             }
 
@@ -161,7 +160,7 @@ fn main() {
         panic!("{}", e);
     });
 
-    let mut rl = DefaultEditor::new().unwrap();
+    let rl = DefaultEditor::new().unwrap();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         // let Ok(line) = rl.readline("> ") else {
@@ -180,15 +179,17 @@ fn main() {
         // pixmap.
 
         draw_text(&mut pixmap, "Hello, world!", 10, 10);
+        draw_text(&mut pixmap, "HIHI!", 10, 90);
+        draw_text(&mut pixmap, "TEXTST!", 10, 190);
 
         let buffer: Vec<u32> = pixmap
             .data()
             .chunks(4)
             .map(|rgba| {
-                let r = rgba[0] as u32;
-                let g = rgba[1] as u32;
-                let b = rgba[2] as u32;
-                let a = rgba[3] as u32;
+                let r = 255 - rgba[0] as u32;
+                let g = 255 - rgba[1] as u32;
+                let b = 255 - rgba[2] as u32;
+                let a = rgba[3] as u32; // Keep the alpha value the same
                 (a << 24) | (b << 16) | (g << 8) | r
             })
             .collect();
