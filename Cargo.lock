@@ -313,6 +313,7 @@ dependencies = [
  "ab_glyph",
  "image-webp",
  "minifb",
+ "once_cell",
  "rustyline",
  "tiny-skia",
 ]

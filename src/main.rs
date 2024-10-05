@@ -1,12 +1,18 @@
 use std::time::Instant;
 
+use ab_glyph::PxScale;
 use ab_glyph::{point, Glyph, Point, ScaleFont};
 use ab_glyph::{Font, FontArc};
+use image_webp::WebPDecoder;
 use minifb::{Key, Scale, Window, WindowOptions};
+use once_cell::sync::Lazy;
 use rustyline::DefaultEditor;
 use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PremultipliedColorU8, Transform};
 
-use ab_glyph::PxScale;
+static BG: Lazy<PremultipliedColorU8> =
+    Lazy::new(|| PremultipliedColorU8::from_rgba(0, 0, 0, 0).unwrap());
+static FG: Lazy<PremultipliedColorU8> =
+    Lazy::new(|| PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap());
 
 pub fn layout_paragraph<F, SF>(
     font: SF,
@@ -59,15 +65,11 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, posx: u32, posy: u32) {
     let mut glyphs = Vec::new();
     layout_paragraph(scaled_font, point(20.0, 20.0), 9999.0, text, &mut glyphs);
 
-    // to work out the exact size needed for the drawn glyphs we need to outline
-    // them and use their `px_bounds` which hold the coords of their render bounds.
     let outlined: Vec<_> = glyphs
         .into_iter()
-        // Note: not all layout glyphs have outlines (e.g. " ")
         .filter_map(|g| font.outline_glyph(g))
         .collect();
 
-    // combine px_bounds to get min bounding coords for the entire layout
     let Some(all_px_bounds) = outlined
         .iter()
         .map(|g| g.px_bounds())
@@ -83,9 +85,6 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, posx: u32, posy: u32) {
         return;
     };
 
-    // create a new rgba image using the combined px bound width and height
-
-    // Loop through the glyphs in the text, positing each one on a line
     for glyph in outlined {
         let bounds = glyph.px_bounds();
         let img_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
@@ -101,14 +100,48 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, posx: u32, posy: u32) {
                 return;
             }
 
-            pixmap.pixels_mut()[pos] = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+            pixmap.pixels_mut()[pos] = *FG;
         });
     }
 }
 
+fn draw_image(pixmap: &mut Pixmap, posx: u32, posy: u32) {
+    let image_data: &[u8] = include_bytes!("../images/output.webp");
+    let cursor = std::io::Cursor::new(image_data);
+    let mut decoder = WebPDecoder::new(cursor).unwrap();
+    let (width, height) = decoder.dimensions();
+    let bytes_per_pixel = if decoder.has_alpha() { 4 } else { 3 };
+    let mut data = vec![0; width as usize * height as usize * bytes_per_pixel];
+    decoder.read_image(&mut data).unwrap();
+
+    let pixmap_width = pixmap.width();
+    let pixmap_height = pixmap.height();
+
+    for y in 0..height.min(pixmap_height) {
+        for x in 0..width.min(pixmap_width) {
+            let index = (y as usize * width as usize + x as usize) * bytes_per_pixel;
+            let pixel = &data[index..index + bytes_per_pixel];
+            let r = pixel[0];
+            let g = pixel[1];
+            let b = pixel[2];
+
+            if 128 > r || 128 > g || 128 > b {
+                continue;
+            }
+
+            let px = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
+            let pos = ((y + posy) * pixmap_width + x + posx) as usize;
+
+            if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
+                *value = px;
+            }
+        }
+    }
+}
+
 fn main() {
-    let width = 400;
-    let height = 400;
+    let width = 500;
+    let height = 500;
 
     // Create a pixmap
     let mut pixmap = Pixmap::new(width, height).unwrap();
@@ -132,13 +165,14 @@ fn main() {
     let mut rl = DefaultEditor::new().unwrap();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        let Ok(line) = rl.readline("> ") else {
-            continue;
-        };
+        // let Ok(line) = rl.readline("> ") else {
+        //     continue;
+        // };
 
-        println!("{}", line);
+        // println!("{}", line);
         //clear pixmap make everything black
         pixmap.fill(Color::from_rgba8(0, 0, 0, 0));
+        draw_image(&mut pixmap, 60, 60);
         // pixmap.
 
         draw_text(&mut pixmap, "Hello, world!", 10, 10);
