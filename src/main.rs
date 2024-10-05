@@ -125,15 +125,14 @@ fn draw_image(pixmap: &mut Pixmap, posx: u32, posy: u32) {
             let g = pixel[1];
             let b = pixel[2];
 
-            if 128 > r || 128 > g || 128 > b {
+            if r > 128 || g > 128 || b > 128 {
                 continue;
             }
 
-            let px = PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap();
             let pos = ((y + posy) * pixmap_width + x + posx) as usize;
 
             if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
-                *value = px;
+                *value = *FG;
             }
         }
     }
@@ -171,7 +170,12 @@ fn main() {
 
         // println!("{}", line);
         //clear pixmap make everything black
-        pixmap.fill(Color::from_rgba8(0, 0, 0, 0));
+        pixmap.fill(Color::from_rgba8(
+            BG.red(),
+            BG.green(),
+            BG.blue(),
+            BG.alpha(),
+        ));
         draw_image(&mut pixmap, 60, 60);
         // pixmap.
 
