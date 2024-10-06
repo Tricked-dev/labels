@@ -2,3 +2,8 @@ target/
 images.tar
 iconTools/icon-sets
 out/
+mode.onnx
+mode.onnx.data
+config.json
+examples.txt
+images/
