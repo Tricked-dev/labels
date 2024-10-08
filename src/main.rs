@@ -1,20 +1,30 @@
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 use std::io::{read_to_string, Cursor, Read};
 use std::path::Path;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, LazyLock, Mutex, RwLock};
+use std::{env, thread};
 
 use ab_glyph::PxScale;
 use ab_glyph::{point, Glyph, Point, ScaleFont};
 use ab_glyph::{Font, FontArc};
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
+use circe::Client;
 use image_webp::WebPDecoder;
 use minifb::{Key, Scale, Window, WindowOptions};
 use rustyline::DefaultEditor;
 use tar_wasi::Archive;
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 use tinyjson::JsonValue;
+
+mod circe;
+mod config;
+mod layout_paragraph;
+
+use config::Config;
+use layout_paragraph::layout_paragraph;
 
 #[derive(Clone, Debug)]
 pub struct EfficientEntry {
@@ -47,7 +57,6 @@ pub fn parse_json_to_data(json: &str) -> Option<Data> {
         y: *y as u32,
         size: *size as u32,
     };
-    dbg!(&data);
     Some(data)
 }
 
@@ -56,49 +65,9 @@ static BG: LazyLock<PremultipliedColorU8> =
 static FG: LazyLock<PremultipliedColorU8> =
     LazyLock::new(|| PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap());
 
-pub fn layout_paragraph<F, SF>(
-    font: SF,
-    position: Point,
-    max_width: f32,
-    text: &str,
-    target: &mut Vec<Glyph>,
-) where
-    F: Font,
-    SF: ScaleFont<F>,
-{
-    let v_advance = font.height() + font.line_gap();
-    let mut caret = position + point(0.0, font.ascent());
-    let mut last_glyph: Option<Glyph> = None;
-    for c in text.chars() {
-        if c.is_control() {
-            if c == '\n' {
-                caret = point(position.x, caret.y + v_advance);
-                last_glyph = None;
-            }
-            continue;
-        }
-        let mut glyph = font.scaled_glyph(c);
-        if let Some(previous) = last_glyph.take() {
-            caret.x += font.kern(previous.id, glyph.id);
-        }
-        glyph.position = caret;
-
-        last_glyph = Some(glyph.clone());
-        caret.x += font.h_advance(glyph.id);
-
-        if !c.is_whitespace() && caret.x > position.x + max_width {
-            caret = point(position.x, caret.y + v_advance);
-            glyph.position = caret;
-            last_glyph = None;
-        }
-
-        target.push(glyph);
-    }
-}
-
-fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) {
+fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
     let font_data: &[u8] = include_bytes!("../BerkeleyMonoTrial-Regular.otf");
-    let font = FontArc::try_from_slice(font_data).unwrap();
+    let font = FontArc::try_from_slice(font_data)?;
 
     let scale = PxScale::from((15 * size) as f32);
 
@@ -123,8 +92,7 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) {
             b
         })
     else {
-        println!("No outlined glyphs?");
-        return;
+        return Err(anyhow!("No outlined glyphs?"));
     };
 
     for glyph in outlined {
@@ -146,6 +114,8 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) {
             pixmap.pixels_mut()[pos] = *FG;
         });
     }
+
+    Ok(())
 }
 
 static IMAGES: LazyLock<Vec<Arc<EfficientEntry>>> = LazyLock::new(|| {
@@ -185,24 +155,20 @@ fn find_icon(name: &str) -> Option<&'_ Bytes> {
     }
 }
 
-fn place_item(pixmap: &mut Pixmap, data: Data) {
+fn place_item(pixmap: &mut Pixmap, data: Data) -> Result<()> {
     match find_icon(&data.text) {
-        Some(bytes) => {
-            draw_image(pixmap, bytes, data.size, data.x, data.y);
-        }
-        None => {
-            draw_text(pixmap, &data.text, data.size, data.x, data.y);
-        }
+        Some(bytes) => draw_image(pixmap, bytes, data.size, data.x, data.y),
+        None => draw_text(pixmap, &data.text, data.size, data.x, data.y),
     }
 }
 
-fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u32) {
+fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u32) -> Result<()> {
     let cursor = std::io::Cursor::new(image);
-    let mut decoder = WebPDecoder::new(cursor).unwrap();
+    let mut decoder = WebPDecoder::new(cursor)?;
     let (width, height) = decoder.dimensions();
     let bytes_per_pixel = if decoder.has_alpha() { 4 } else { 3 };
     let mut data = vec![0; width as usize * height as usize * bytes_per_pixel];
-    decoder.read_image(&mut data).unwrap();
+    decoder.read_image(&mut data)?;
 
     let pixmap_width = pixmap.width();
     let pixmap_height = pixmap.height();
@@ -212,8 +178,6 @@ fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u3
             let index = (y as usize * width as usize + x as usize) * bytes_per_pixel;
             let pixel = &data[index..index + bytes_per_pixel];
             let a = pixel[3];
-
-            dbg!(a);
 
             let pos = ((y + posy) * pixmap_width + x + posx) as usize;
 
@@ -226,6 +190,7 @@ fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u3
             }
         }
     }
+    Ok(())
 }
 
 fn escape_json_string(input: &str) -> String {
@@ -245,62 +210,9 @@ fn escape_json_string(input: &str) -> String {
     }
     escaped
 }
+static CONFIG: LazyLock<Config> = LazyLock::new(Config::load);
 
-struct Config {
-    model: String,
-    prompt: String,
-    openai_api_key: Option<String>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            model: "gpt-4o-mini".to_string(),
-            prompt: "You extract the x y location and size from a text, the x and y can appear anywhere in the text and the size can be nothing in which case you set it to 5, remove the indication words such as Place and At".to_owned(),
-            openai_api_key: None,
-        }
-    }
-}
-
-impl Config {
-    fn load() -> Self {
-        let mut config = Config::default();
-        if let Some(model) = env::var("MODEL").ok() {
-            config.model = model;
-        }
-        if let Some(prompt) = env::var("PROMPT").ok() {
-            config.prompt = prompt;
-        }
-        if let Some(openai_api_key) = env::var("OPENAI_API_KEY").ok() {
-            config.openai_api_key = Some(openai_api_key);
-        };
-
-        let config_path = env::var("CONFIG_PATH").unwrap_or("config.json".to_string());
-        if Path::new(&config_path).exists() {
-            let file = std::fs::read_to_string(config_path).unwrap();
-            let data: JsonValue = file.parse().unwrap();
-            let parsed: &HashMap<_, _> = data.get().unwrap();
-            if let Some(model) = parsed.get("model") {
-                config.model = model.get::<String>().unwrap().to_string();
-            }
-            if let Some(prompt) = parsed.get("prompt") {
-                config.prompt = prompt.get::<String>().unwrap().to_string();
-            }
-            if let Some(openai_api_key) = parsed.get("openai_api_key") {
-                config.openai_api_key = Some(openai_api_key.get::<String>().unwrap().to_string());
-            }
-        };
-
-        if config.openai_api_key.is_none() {
-            panic!("No OpenAI API key found");
-        };
-
-        config
-    }
-}
-
-fn main() {
-    let config = Config::load();
+fn text_to_date(text: &str) -> Result<Data> {
     let body = [
         r##"
 {
@@ -309,7 +221,7 @@ fn main() {
     {
       "role": "system",
       "content": ""##,
-        &config.prompt,
+        &CONFIG.prompt,
         r##""
     },
     {
@@ -352,22 +264,37 @@ fn main() {
     .join("");
 
     let req = attohttpc::post("https://api.openai.com/v1/chat/completions")
-        .text(body.replace(
-            "QUERY",
-            &escape_json_string("Place Hello World at 20,20 with size 10"),
-        ))
+        .text(body.replace("QUERY", &escape_json_string(text)))
         .header("Content-Type", "application/json")
         .header(
             "Authorization",
-            &format!("Bearer {}", config.openai_api_key.unwrap()),
+            format!("Bearer {}", CONFIG.openai_api_key.clone().unwrap()),
         )
-        .send()
-        .unwrap();
+        .send()?;
 
-    let data = parse_json_to_data(req.text().unwrap().as_str()).unwrap();
-    // println!("{}", req.text().unwrap());
+    let data = parse_json_to_data(req.text()?.as_str()).ok_or(anyhow!("Failed to parse JSON"))?;
 
-    panic!("Done");
+    Ok(data)
+}
+
+enum UICommand {
+    Clear,
+    Draw(Data),
+    Quit,
+}
+
+static SHOULD_QUIT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
+
+fn main() -> Result<()> {
+    dbg!(&*CONFIG);
+    let config = Config::load();
+
+    // loop {
+    //     let line = client.read()?;
+    //     println!("{:?}", line);
+    // }
+
+    // panic!("Done");
 
     let width = 500;
     let height = 500;
@@ -400,23 +327,98 @@ fn main() {
         BG.alpha(),
     ));
 
+    // place_item(
+    //     &mut pixmap,
+    //     text_to_date("Place Hello World at 20,20 with size 2")?,
+    // )?;
+
+    // place_item(&mut pixmap, text_to_date("0,60 cat x4")?)?;
+
+    let (tx, rx) = mpsc::channel::<UICommand>();
+
+    let tx = Arc::new(tx);
+    let tx_clone = tx.clone();
+    let thread = std::thread::spawn(move || {
+        let tx = tx_clone;
+
+        let result = move || {
+            let mut client = Client::new(circe::Config {
+                channels: vec![CONFIG.irc_channel.clone()],
+                host: CONFIG.irc_host.clone(),
+                port: 6697,
+                username: CONFIG.irc_username.clone().unwrap(),
+                ..Default::default()
+            })?;
+            client.write_command(circe::commands::Command::PASS(
+                CONFIG.irc_token.clone().unwrap(),
+            ))?;
+            client.identify()?;
+
+            client.privmsg(&CONFIG.irc_channel, ":Hello, world!")?;
+
+            loop {
+                let line = match client.read() {
+                    Ok(line) => line,
+                    Err(..) => {
+                        thread::sleep(std::time::Duration::from_millis(200));
+                        if SHOULD_QUIT.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        continue;
+                    }
+                };
+
+                match line {
+                    circe::commands::Command::PRIVMSG(nick, channel, message) => {
+                        println!("PRIVMSG received from {}: {} {}", nick, channel, message);
+                        tx.send(UICommand::Draw(text_to_date(&message)?))?;
+                    }
+                    circe::commands::Command::QUIT(message) => {
+                        println!("QUIT received from {}", message);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        };
+        let out: Result<()> = result();
+        println!("Thread done: {:?}", out);
+    });
+
+    let cleaner_thread = std::thread::spawn(move || {
+        let mut iter = 0;
+        let count = 60 * 5;
+        loop {
+            if SHOULD_QUIT.load(Ordering::Relaxed) {
+                break;
+            }
+            if iter == count {
+                tx.send(UICommand::Clear).ok();
+                iter = 0
+            } else {
+                iter += 1;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
+
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        // let Ok(line) = rl.readline("> ") else {
-        //     continue;
-        // };
-
-        // println!("{}", line);
-        //clear pixmap make everything black
-
-        // draw_image(&mut pixmap, "gear", 60, 60);
-        // draw_image(&mut pixmap, "binary", 0, 60);
-        // draw_image(&mut pixmap, "binary", 0, 90);
-        // // pixmap.
-
-        // draw_text(&mut pixmap, "Hello, world!", 10, 10);
-        // draw_text(&mut pixmap, "HIHI!", 10, 90);
-        // draw_text(&mut pixmap, "TEXTST!", 10, 190);
-
+        match rx.recv().unwrap() {
+            UICommand::Clear => {
+                pixmap.fill(Color::from_rgba8(
+                    BG.red(),
+                    BG.green(),
+                    BG.blue(),
+                    BG.alpha(),
+                ));
+            }
+            UICommand::Draw(data) => {
+                place_item(&mut pixmap, data)?;
+            }
+            UICommand::Quit => {
+                break;
+            }
+        }
         let buffer: Vec<u32> = pixmap
             .data()
             .chunks(4)
@@ -433,4 +435,10 @@ fn main() {
             .update_with_buffer(&buffer, width as usize, height as usize)
             .unwrap();
     }
+
+    SHOULD_QUIT.store(true, Ordering::Relaxed);
+    thread.join().unwrap();
+    cleaner_thread.join().unwrap();
+
+    Ok(())
 }
