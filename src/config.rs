@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::Path};
+use std::{clone, collections::HashMap, env, path::Path};
 
 use tinyjson::JsonValue;
 #[derive(Debug)]
@@ -10,6 +10,8 @@ pub struct Config {
     pub irc_channel: String,
     pub irc_token: String,
     pub irc_username: String,
+    pub width: i64,
+    pub height: i64,
 }
 
 impl Default for Config {
@@ -21,7 +23,9 @@ impl Default for Config {
             irc_token: "".to_owned(),
             irc_host: "irc.chat.twitch.tv".to_string(),
             irc_username:"".to_owned(),
-            irc_channel:"".to_owned()
+            irc_channel:"".to_owned(),
+            width:500,
+            height:500,
         }
     }
 }
@@ -29,6 +33,21 @@ impl Default for Config {
 impl Config {
     pub fn load() -> Self {
         let mut config = Config::default();
+
+        let parsed: HashMap<_, _> = {
+            let config_path = env::var("CONFIG_PATH").unwrap_or("config.json".to_string());
+            if let Ok(file) = std::fs::read_to_string(config_path) {
+                if let Ok(data) = file.parse::<JsonValue>() {
+                    data.get().cloned()
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        .unwrap_or_default();
+
         if let Ok(model) = env::var("MODEL") {
             config.model = model;
         }
@@ -52,33 +71,44 @@ impl Config {
             config.irc_channel = irc_channel;
         };
 
-        let config_path = env::var("CONFIG_PATH").unwrap_or("config.json".to_string());
-        if Path::new(&config_path).exists() {
-            let file = std::fs::read_to_string(config_path).unwrap();
-            let data: JsonValue = file.parse().unwrap();
-            let parsed: &HashMap<_, _> = data.get().unwrap();
-            if let Some(model) = parsed.get("model") {
-                config.model = model.get::<String>().unwrap().to_string();
-            }
-            if let Some(prompt) = parsed.get("prompt") {
-                config.prompt = prompt.get::<String>().unwrap().to_string();
-            }
-            if let Some(openai_api_key) = parsed.get("openai_api_key") {
-                config.openai_api_key = openai_api_key.get::<String>().unwrap().to_string();
-            }
-            if let Some(irc_token) = parsed.get("irc_token") {
-                config.irc_token = irc_token.get::<String>().unwrap().to_string();
-            }
-            if let Some(irc_host) = parsed.get("irc_host") {
-                config.irc_host = irc_host.get::<String>().unwrap().to_string();
-            }
-            if let Some(irc_username) = parsed.get("irc_username") {
-                config.irc_username = irc_username.get::<String>().unwrap().to_string();
-            }
-            if let Some(irc_channel) = parsed.get("irc_channel") {
-                config.irc_channel = irc_channel.get::<String>().unwrap().to_string();
-            }
-        };
+        if let Ok(width) = env::var("WIDTH") {
+            config.width = width.parse().unwrap();
+        }
+
+        if let Ok(height) = env::var("HEIGHT") {
+            config.height = height.parse().unwrap();
+        }
+
+        // JSON VALUES
+
+        if let Some(model) = parsed.get("model") {
+            config.model = model.get::<String>().unwrap().to_string();
+        }
+        if let Some(prompt) = parsed.get("prompt") {
+            config.prompt = prompt.get::<String>().unwrap().to_string();
+        }
+        if let Some(openai_api_key) = parsed.get("openai_api_key") {
+            config.openai_api_key = openai_api_key.get::<String>().unwrap().to_string();
+        }
+        if let Some(irc_token) = parsed.get("irc_token") {
+            config.irc_token = irc_token.get::<String>().unwrap().to_string();
+        }
+        if let Some(irc_host) = parsed.get("irc_host") {
+            config.irc_host = irc_host.get::<String>().unwrap().to_string();
+        }
+        if let Some(irc_username) = parsed.get("irc_username") {
+            config.irc_username = irc_username.get::<String>().unwrap().to_string();
+        }
+        if let Some(irc_channel) = parsed.get("irc_channel") {
+            config.irc_channel = irc_channel.get::<String>().unwrap().to_string();
+        }
+
+        if let Some(width) = parsed.get("width") {
+            config.width = width.get::<f64>().unwrap().round() as i64;
+        }
+        if let Some(height) = parsed.get("height") {
+            config.height = height.get::<f64>().unwrap().round() as i64;
+        }
 
         if config.openai_api_key.is_empty() {
             panic!("No OpenAI API key found");

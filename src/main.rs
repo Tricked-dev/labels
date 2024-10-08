@@ -1,20 +1,17 @@
-use std::collections::HashMap;
 use std::fs::File;
-use std::io::{read_to_string, Cursor, Read};
-use std::path::Path;
+use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, LazyLock, Mutex, RwLock};
-use std::{env, thread};
+use std::sync::{mpsc, Arc, LazyLock};
+use std::thread;
 
+use ab_glyph::point;
 use ab_glyph::PxScale;
-use ab_glyph::{point, Glyph, Point, ScaleFont};
 use ab_glyph::{Font, FontArc};
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use circe::Client;
 use image_webp::WebPDecoder;
 use minifb::{Key, Scale, Window, WindowOptions};
-use rustyline::DefaultEditor;
 use tar_wasi::Archive;
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 use tinyjson::JsonValue;
@@ -31,8 +28,6 @@ pub struct EfficientEntry {
     pub path: String,
     pub bytes: Bytes,
 }
-
-use std::str::FromStr;
 
 #[derive(Debug, PartialEq)]
 pub struct Data {
@@ -170,23 +165,34 @@ fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u3
     let mut data = vec![0; width as usize * height as usize * bytes_per_pixel];
     decoder.read_image(&mut data)?;
 
+    // let scaled_width = width * size;
+    // let scaled_height = height * size;
+
     let pixmap_width = pixmap.width();
     let pixmap_height = pixmap.height();
 
-    for y in 0..height.min(pixmap_height) {
-        for x in 0..width.min(pixmap_width) {
+    for y in 0..height {
+        for x in 0..width {
             let index = (y as usize * width as usize + x as usize) * bytes_per_pixel;
             let pixel = &data[index..index + bytes_per_pixel];
             let a = pixel[3];
-
-            let pos = ((y + posy) * pixmap_width + x + posx) as usize;
 
             if a > 128 {
                 continue;
             }
 
-            if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
-                *value = *FG;
+            for sy in 0..size {
+                for sx in 0..size {
+                    let scaled_x = x * size + sx;
+                    let scaled_y = y * size + sy;
+
+                    if scaled_x < pixmap_width && scaled_y < pixmap_height {
+                        let pos = ((scaled_y + posy) * pixmap_width + scaled_x + posx) as usize;
+                        if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
+                            *value = *FG;
+                        }
+                    }
+                }
             }
         }
     }
@@ -288,8 +294,6 @@ static SHOULD_QUIT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(fals
 fn main() -> Result<()> {
     dbg!(&*CONFIG);
 
-    let config = Config::load();
-
     let width = 500;
     let height = 500;
 
@@ -312,21 +316,12 @@ fn main() -> Result<()> {
         panic!("{}", e);
     });
 
-    let rl = DefaultEditor::new().unwrap();
-
     pixmap.fill(Color::from_rgba8(
         BG.red(),
         BG.green(),
         BG.blue(),
         BG.alpha(),
     ));
-
-    // place_item(
-    //     &mut pixmap,
-    //     text_to_date("Place Hello World at 20,20 with size 2")?,
-    // )?;
-
-    // place_item(&mut pixmap, text_to_date("0,60 cat x4")?)?;
 
     let (tx, rx) = mpsc::channel::<UICommand>();
 
@@ -425,9 +420,7 @@ fn main() -> Result<()> {
             })
             .collect();
 
-        window
-            .update_with_buffer(&buffer, width as usize, height as usize)
-            .unwrap();
+        window.update_with_buffer(&buffer, width as usize, height as usize)?;
     }
 
     SHOULD_QUIT.store(true, Ordering::Relaxed);
