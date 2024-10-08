@@ -268,7 +268,7 @@ fn text_to_date(text: &str) -> Result<Data> {
         .header("Content-Type", "application/json")
         .header(
             "Authorization",
-            format!("Bearer {}", CONFIG.openai_api_key.clone().unwrap()),
+            format!("Bearer {}", CONFIG.openai_api_key.clone()),
         )
         .send()?;
 
@@ -346,12 +346,10 @@ fn main() -> Result<()> {
                 channels: vec![CONFIG.irc_channel.clone()],
                 host: CONFIG.irc_host.clone(),
                 port: 6697,
-                username: CONFIG.irc_username.clone().unwrap(),
+                username: CONFIG.irc_username.clone(),
                 ..Default::default()
             })?;
-            client.write_command(circe::commands::Command::PASS(
-                CONFIG.irc_token.clone().unwrap(),
-            ))?;
+            client.write_command(circe::commands::Command::PASS(CONFIG.irc_token.clone()))?;
             client.identify()?;
 
             client.privmsg(&CONFIG.irc_channel, ":Hello, world!")?;
