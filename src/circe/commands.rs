@@ -1,5 +1,6 @@
 // Vendored library is good
 #![allow(dead_code)]
+#![allow(clippy::upper_case_acronyms)]
 
 #[derive(Debug)]
 pub enum CapMode {
@@ -190,12 +191,9 @@ impl Command {
     pub fn command_from_str(s: &str) -> Self {
         let new = s.trim();
 
-        #[cfg(feature = "debug")]
-        print!("{}", new);
-
         let parts: Vec<&str> = new.split_whitespace().collect();
 
-        if parts.get(0) == Some(&"PING") {
+        if parts.first() == Some(&"PING") {
             // We can assume that [1] exists because if it doesn't then something's gone very wrong
             // with the IRCD
             let command = parts[1].to_string();
@@ -207,10 +205,11 @@ impl Command {
             let target = parts[2];
             let mut builder = String::new();
 
+            #[allow(clippy::unnecessary_to_owned)]
             for part in parts[3..].to_vec() {
                 builder.push_str(&format!("{} ", part));
             }
-
+            #[allow(clippy::needless_borrow)]
             return Self::PRIVMSG(nick, target.to_string(), (&builder[1..]).to_string());
         }
 

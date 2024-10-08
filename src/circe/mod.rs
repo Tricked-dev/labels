@@ -1,3 +1,6 @@
+// CIRCE - Vendored from https://crates.io/crates/circe
+// LICENSE - unlicense https://choosealicense.com/licenses/unlicense/
+// Applies to commands.rs TOO
 //! A simple IRC crate written in rust
 //! ```no_run
 //! use circe::{commands::Command, Client, Config};
@@ -27,7 +30,6 @@
 
 use anyhow::Result;
 use rustls::pki_types::ServerName;
-use rustls::ClientConfig;
 use rustls::ClientConnection;
 use rustls::StreamOwned;
 use std::borrow::Cow;
@@ -35,7 +37,7 @@ use std::io::{Error, Read, Write};
 use std::net::Shutdown;
 use std::net::TcpStream;
 use std::sync::Arc;
-use webpki::DNSNameRef;
+
 /// IRC comamnds
 pub mod commands;
 
@@ -154,6 +156,8 @@ impl Client {
         Ok(())
     }
 
+    // edit by me - i am pretty sure that original circe creator tested this and it doesn't matter
+    #[allow(clippy::unused_io_amount)]
     fn read_string(&mut self) -> Option<String> {
         let mut buffer = [0u8; 512];
 

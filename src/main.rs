@@ -287,14 +287,8 @@ static SHOULD_QUIT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(fals
 
 fn main() -> Result<()> {
     dbg!(&*CONFIG);
+
     let config = Config::load();
-
-    // loop {
-    //     let line = client.read()?;
-    //     println!("{:?}", line);
-    // }
-
-    // panic!("Done");
 
     let width = 500;
     let height = 500;
@@ -341,7 +335,7 @@ fn main() -> Result<()> {
     let thread = std::thread::spawn(move || {
         let tx = tx_clone;
 
-        let result = move || {
+        let result = || {
             let mut client = Client::new(circe::Config {
                 channels: vec![CONFIG.irc_channel.clone()],
                 host: CONFIG.irc_host.clone(),
@@ -377,9 +371,11 @@ fn main() -> Result<()> {
                     _ => {}
                 }
             }
+
             Ok(())
         };
         let out: Result<()> = result();
+        tx.send(UICommand::Quit).ok();
         println!("Thread done: {:?}", out);
     });
 
