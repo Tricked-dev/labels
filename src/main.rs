@@ -3,15 +3,17 @@ use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, LazyLock};
 use std::thread;
+use std::time::Duration;
 
 use ab_glyph::point;
 use ab_glyph::PxScale;
 use ab_glyph::{Font, FontArc};
-use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use circe::Client;
+use color_eyre::{eyre::anyhow, Result};
 use image_webp::WebPDecoder;
 use minifb::{Key, Scale, Window, WindowOptions};
+use niimbot::NiimbotPrinterClient;
 use tar_wasi::Archive;
 use tiny_skia::{Color, Pixmap, PremultipliedColorU8};
 use tinyjson::JsonValue;
@@ -19,6 +21,7 @@ use tinyjson::JsonValue;
 mod circe;
 mod config;
 mod layout_paragraph;
+mod niimbot;
 
 use config::Config;
 use layout_paragraph::layout_paragraph;
@@ -97,7 +100,10 @@ fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) -
         glyph.draw(|x, y, v| {
             let w = pixmap.width();
             let pos = (img_left + x + posx) as usize + (img_top + y + posy) as usize * w as usize;
-            let px = pixmap.pixels()[pos];
+
+            let Some(px) = pixmap.pixels().get(pos) else {
+                return;
+            };
 
             let alpha = px.alpha().saturating_add((v * 255.0) as u8);
             let write = alpha > 128;
@@ -292,15 +298,114 @@ enum UICommand {
 static SHOULD_QUIT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 fn main() -> Result<()> {
-    dbg!(&*CONFIG);
-
-    let width = 500;
-    let height = 500;
+    let width = 400;
+    let height = 240;
 
     // Create a pixmap
     let mut pixmap = Pixmap::new(width, height).unwrap();
 
     // Create a window
+
+    // pixmap.fill(Color::from_rgba8(
+    //     FG.red(),
+    //     FG.green(),
+    //     BG.blue(),
+    //     BG.alpha(),
+    // ));
+
+    // pixmap.pixels_mut()[(height * 20 + 50) as usize] = *FG;
+
+    draw_text(&mut pixmap, "Hello world", 4, 0, 0)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 30)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 60)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 90)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 100)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 120)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 150)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 200)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 220)?;
+    draw_text(&mut pixmap, "Hello world", 4, 0, 230)?;
+
+    // pixmap.save_png("test.png").unwrap();
+
+    let devices = rusb::devices().unwrap();
+    // NIMBOT: 3513:0002
+    let niimbot = devices.iter().find(|d| {
+        // dbg!(d);
+        d.device_descriptor()
+            .map(|desc| desc.vendor_id() == 0x3513)
+            .unwrap_or(false)
+    });
+
+    let buffer: Vec<u32> = pixmap
+        .data()
+        .chunks(4)
+        .map(|rgba| {
+            let r = 255 - rgba[0] as u32;
+            let g = 255 - rgba[1] as u32;
+            let b = 255 - rgba[2] as u32;
+            let a = rgba[3] as u32; // Keep the alpha value the same
+            (a << 24) | (b << 16) | (g << 8) | r
+        })
+        .collect();
+
+    // let mut client = NiimbotPrinter::new("/dev/ttyACM0").unwrap();
+    // client.connect().unwrap();
+    // client
+    //     .print_image(&buffer, width as u32, height as u32)
+    //     .unwrap();
+
+    println!("Done printing");
+
+    // client.heartbeat().unwrap();
+    // client.print_image(&buffer, width as u16, height as u16, 1, 1)?;
+    match niimbot {
+        Some(device) => {
+            let handle = device.open()?;
+            if handle.kernel_driver_active(0)? {
+                handle.detach_kernel_driver(0)?;
+            }
+            handle.claim_interface(0)?;
+            let mut client = NiimbotPrinterClient::new(handle)?;
+
+            // client.heartbeat().unwrap();
+            client.print_label(&buffer, width as usize, height as usize, 1, 1, 5)?;
+            // let transport = UsbTransport::new(handle);
+            // let client = PrinterClient::new(transport);
+            // client.print_image(width as usize, height as usize, &buffer, 3);
+            // let packets = client._recv();
+            // dbg!(packets);
+        }
+        None => {
+            panic!("No Niimbot found");
+        }
+    }
+    // for device in devices.iter() {
+    //     if let Ok(desc) = device.device_descriptor() {
+    //         println!("{:?}", desc);
+    //     }
+    // }
+    Ok(())
+}
+
+fn main_s() -> Result<()> {
+    dbg!(&*CONFIG);
+
+    let width = 399;
+    let height = 239;
+
+    // Create a pixmap
+    let mut pixmap = Pixmap::new(width, height).unwrap();
+
+    // Create a window
+
+    pixmap.fill(Color::from_rgba8(
+        BG.red(),
+        BG.green(),
+        BG.blue(),
+        BG.alpha(),
+    ));
+
     let mut window = Window::new(
         "H",
         width as usize,
@@ -315,13 +420,6 @@ fn main() -> Result<()> {
     .unwrap_or_else(|e| {
         panic!("{}", e);
     });
-
-    pixmap.fill(Color::from_rgba8(
-        BG.red(),
-        BG.green(),
-        BG.blue(),
-        BG.alpha(),
-    ));
 
     let (tx, rx) = mpsc::channel::<UICommand>();
 

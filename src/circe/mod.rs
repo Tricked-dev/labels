@@ -28,7 +28,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(dead_code)]
 
-use anyhow::Result;
+use color_eyre::{eyre::anyhow, Result};
 use rustls::pki_types::ServerName;
 use rustls::ClientConnection;
 use rustls::StreamOwned;

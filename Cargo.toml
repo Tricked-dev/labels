@@ -8,6 +8,7 @@ tiny-skia = { version = "0.7", default-features = false, features = [
     "safe_arch",
     "simd",
     "std",
+    "png-format",
 ] }
 minifb = { version = "0.17", default-features = false, features = ["x11"] }
 ab_glyph = "0.2.28"
@@ -21,6 +22,9 @@ tinyjson = "2.5.1"
 anyhow = "1.0.89"
 rustls = "0.23.14"
 rustls-native-certs = "0.8.0"
+rusb = "0.9.4"
+color-eyre = "0.6.3"
+serialport = "4.5.1"
 
 [profile.release]
 panic = "abort"
