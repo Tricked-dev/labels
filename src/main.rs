@@ -368,7 +368,10 @@ fn main() -> Result<()> {
             handle.claim_interface(0)?;
             let mut client = NiimbotPrinterClient::new(handle)?;
 
-            // client.heartbeat().unwrap();
+            client.heartbeat().unwrap();
+            client.heartbeat().unwrap();
+            client.heartbeat().unwrap();
+            client.heartbeat().unwrap();
             client.print_label(&buffer, width as usize, height as usize, 1, 1, 5)?;
             // let transport = UsbTransport::new(handle);
             // let client = PrinterClient::new(transport);

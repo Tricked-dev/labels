@@ -55,8 +55,6 @@ fn prepare_image(image: &[u32], width: usize, height: usize) -> Vec<Vec<u8>> {
         // header[3] = 0;
         header[2] = (mid_point as i32 - left as i32) as u8;
         header[3] = (mid_point as i32 - right as i32) as u8;
-        dbg!(mid_point as i32 - left as i32);
-        dbg!(mid_point as i32 - right as i32);
         header[4..6].copy_from_slice(&(1 as u16).to_be_bytes());
 
         image_data.push([header.to_vec(), line_data].concat());
@@ -161,6 +159,7 @@ impl NiimbotPrinterClient {
         let response = self.transceive(220, &[0x01], 1)?;
         // Process the response data
         println!("Heartbeat response: {:?}", response);
+
         Ok(())
     }
 
@@ -214,15 +213,19 @@ impl NiimbotPrinterClient {
 
         // self.set_label_type(label_type)?;
         // self.set_label_density(label_density)?;
+        println!("Starting print");
         self.start_print()?;
         // self.allow_print_clear()?;
+        println!("Starting page print");
         self.start_page_print()?;
+        println!("Setting page size");
         self.set_page_size_v3(width as u16, height as u16, label_qty as u16)?;
         // self.set_dimension(width as u16, height as u16)?;
         // self.set_quantity(label_qty)?;
 
         // Convert the image to packets using naive_encoder and send them
         let packets = NiimbotPrinterClient::naive_encoder(width, height, image);
+        dbg!(packets.len());
         for packet in packets {
             self.send(packet)?;
         }
@@ -231,10 +234,12 @@ impl NiimbotPrinterClient {
         // dbg!("End Psage");
         self.end_page_print()?;
         // dbg!("Send Page print");
-        // while self.get_print_status()?.get("page").copied().unwrap_or(0) != label_qty.into() {
-        //     sleep(Duration::from_millis(300));
-        // }
-        // dbg!("End Print");
+        while self.get_print_status()?.get("page").copied().unwrap_or(0) != label_qty.into() {
+            self.heartbeat().unwrap();
+            sleep(Duration::from_millis(300));
+        }
+        dbg!("End Print");
+        self.end_page_print()?;
 
         // // dbg!("End print!");
         // self.end_print()?;
@@ -251,7 +256,7 @@ impl NiimbotPrinterClient {
     }
 
     fn start_print(&mut self) -> Result<(), UsbError> {
-        self.transceive(1, &[0x01], 1).map(|_| ())
+        self.transceive(1, &[0x01], 1).map(|v| dbg!(v)).map(|_| ())
     }
 
     fn allow_print_clear(&mut self) -> Result<(), UsbError> {
