@@ -1,6 +1,7 @@
+use color_eyre::{eyre::anyhow, Result};
 use rusb::{Context, DeviceHandle, Error as UsbError, GlobalContext, UsbContext};
+use serialport::SerialPort;
 use std::{thread::sleep, time::Duration};
-
 //ISSUE: starts printing but then printer stops responding and i have to replug it
 
 #[derive(Debug)]
@@ -97,30 +98,30 @@ impl NiimbotPacket {
 }
 
 pub struct NiimbotPrinterClient {
-    pub device_handle: DeviceHandle<GlobalContext>,
+    pub serial_port: Box<dyn SerialPort>,
 }
 
 impl NiimbotPrinterClient {
-    pub fn new(device_handle: DeviceHandle<GlobalContext>) -> Result<Self, UsbError> {
-        Ok(Self { device_handle })
+    pub fn new() -> Result<Self> {
+        let serial_port = serialport::new("/dev/ttyACM0", 115_200).open().unwrap();
+        Ok(Self { serial_port })
     }
 
-    pub fn send(&mut self, packet: NiimbotPacket) -> Result<usize, UsbError> {
+    pub fn send(&mut self, packet: NiimbotPacket) -> Result<usize> {
         let bytes = packet.to_bytes();
-        self.device_handle
-            .write_bulk(0x01, &bytes, Duration::from_secs(1))
+        self.serial_port.write_all(&bytes)?;
+        std::thread::sleep(Duration::from_millis(10));
+        Ok(0)
     }
 
-    fn recv(&mut self) -> Result<Vec<NiimbotPacket>, UsbError> {
+    fn recv(&mut self) -> Result<Vec<NiimbotPacket>> {
         let mut packets = Vec::new();
         let mut buffer = [0u8; 1024];
         let start_bytes = [0x55, 0x55];
         let end_bytes = [0xaa, 0xaa];
         let mut packet_buffer = Vec::new();
 
-        let bytes_read = self
-            .device_handle
-            .read_bulk(0x81, &mut buffer, Duration::from_secs(1))?;
+        let bytes_read = self.serial_port.read(&mut buffer)?;
         // dbg!("Bytes read: {}", bytes_read);
         let mut position = 0;
         while position < bytes_read {
@@ -155,7 +156,7 @@ impl NiimbotPrinterClient {
             .collect()
     }
 
-    pub fn heartbeat(&mut self) -> Result<(), UsbError> {
+    pub fn heartbeat(&mut self) -> Result<()> {
         let response = self.transceive(220, &[0x01], 1)?;
         // Process the response data
         println!("Heartbeat response: {:?}", response);
@@ -163,7 +164,7 @@ impl NiimbotPrinterClient {
         Ok(())
     }
 
-    pub fn get_info(&mut self, info_type: u8) -> Result<Vec<u8>, UsbError> {
+    pub fn get_info(&mut self, info_type: u8) -> Result<Vec<u8>> {
         let response = self.transceive(64, &[info_type], 0)?;
         Ok(response.data)
     }
@@ -173,7 +174,7 @@ impl NiimbotPrinterClient {
         request_code: u8,
         data: &[u8],
         response_offset: u8,
-    ) -> Result<NiimbotPacket, UsbError> {
+    ) -> Result<NiimbotPacket> {
         let packet = NiimbotPacket {
             packet_type: request_code,
             data: data.to_vec(),
@@ -196,7 +197,7 @@ impl NiimbotPrinterClient {
             std::thread::sleep(Duration::from_millis(200));
         }
 
-        Err(rusb::Error::Io)
+        Err(anyhow!("No response"))
     }
 
     pub fn print_label(
@@ -207,7 +208,7 @@ impl NiimbotPrinterClient {
         label_qty: u8,
         label_type: u8,
         label_density: u8,
-    ) -> Result<(), UsbError> {
+    ) -> Result<()> {
         // Resize and rotate the image if necessary
         // let packets = NiimbotPrinterClient::naive_encoder(width, height, image);
 
@@ -247,27 +248,27 @@ impl NiimbotPrinterClient {
         Ok(())
     }
 
-    fn set_label_type(&mut self, label_type: u8) -> Result<(), UsbError> {
+    fn set_label_type(&mut self, label_type: u8) -> Result<()> {
         self.transceive(35, &[label_type], 16).map(|_| ())
     }
 
-    fn set_label_density(&mut self, density: u8) -> Result<(), UsbError> {
+    fn set_label_density(&mut self, density: u8) -> Result<()> {
         self.transceive(33, &[density], 16).map(|_| ())
     }
 
-    fn start_print(&mut self) -> Result<(), UsbError> {
+    fn start_print(&mut self) -> Result<()> {
         self.transceive(1, &[0x01], 1).map(|v| dbg!(v)).map(|_| ())
     }
 
-    fn allow_print_clear(&mut self) -> Result<(), UsbError> {
+    fn allow_print_clear(&mut self) -> Result<()> {
         self.transceive(32, &[0x01], 16).map(|_| ())
     }
 
-    fn start_page_print(&mut self) -> Result<(), UsbError> {
+    fn start_page_print(&mut self) -> Result<()> {
         self.transceive(3, &[0x01], 1).map(|_| ())
     }
 
-    fn set_page_size_v3(&mut self, rows: u16, cols: u16, copies: u16) -> Result<(), UsbError> {
+    fn set_page_size_v3(&mut self, rows: u16, cols: u16, copies: u16) -> Result<()> {
         let bytes: Vec<u8> =
             [rows.to_be_bytes(), cols.to_be_bytes(), copies.to_be_bytes()].concat();
 
@@ -281,15 +282,15 @@ impl NiimbotPrinterClient {
         Ok(())
     }
 
-    fn end_page_print(&mut self) -> Result<(), UsbError> {
+    fn end_page_print(&mut self) -> Result<()> {
         self.transceive(0xe3, &[0x01], 1).map(|_| ())
     }
 
-    fn end_print(&mut self) -> Result<(), UsbError> {
+    fn end_print(&mut self) -> Result<()> {
         self.transceive(243, &[0x01], 1).map(|_| ())
     }
 
-    fn set_dimension(&mut self, width: u16, height: u16) -> Result<(), UsbError> {
+    fn set_dimension(&mut self, width: u16, height: u16) -> Result<()> {
         let dimension_bytes = [
             (width >> 8) as u8,
             width as u8,
@@ -299,15 +300,15 @@ impl NiimbotPrinterClient {
         self.transceive(19, &dimension_bytes, 1).map(|_| ())
     }
 
-    fn set_quantity(&mut self, quantity: u8) -> Result<(), UsbError> {
+    fn set_quantity(&mut self, quantity: u8) -> Result<()> {
         self.transceive(21, &[quantity], 1).map(|_| ())
     }
 
-    fn get_print_status(&mut self) -> Result<std::collections::HashMap<String, usize>, UsbError> {
+    fn get_print_status(&mut self) -> Result<std::collections::HashMap<String, usize>> {
         let response = self.transceive(163, &[0x01], 16)?;
         let data = response.data;
         if data.len() < 4 {
-            return Err(rusb::Error::Io);
+            return Err(anyhow!("Invalid response"));
         }
         let page = u16::from_be_bytes([data[0], data[1]]) as usize;
         let progress1 = data[2] as usize;
@@ -330,7 +331,7 @@ impl NiimbotPrinterClient {
     // Similar implementations for other commands such as setLabelType, startPrint, etc. can be added here
 }
 
-// fn main() -> Result<(), UsbError> {
+// fn main() -> Result<()> {
 //     let mut printer = NiimbotPrinterClient::new(0x1234, 0x5678)?;
 //     let img = image::open("path/to/image.png").expect("Failed to open image");
 

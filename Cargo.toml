@@ -23,6 +23,7 @@ rustls = "0.23.14"
 rustls-native-certs = "0.8.0"
 rusb = "0.9.4"
 color-eyre = "0.6.3"
+serialport = "4.5.1"
 
 [profile.release]
 panic = "abort"

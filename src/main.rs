@@ -326,17 +326,6 @@ fn main() -> Result<()> {
     draw_text(&mut pixmap, "Hello world", 4, 0, 220)?;
     draw_text(&mut pixmap, "Hello world", 4, 0, 230)?;
 
-    // pixmap.save_png("test.png").unwrap();
-
-    let devices = rusb::devices().unwrap();
-    // NIMBOT: 3513:0002
-    let niimbot = devices.iter().find(|d| {
-        // dbg!(d);
-        d.device_descriptor()
-            .map(|desc| desc.vendor_id() == 0x3513)
-            .unwrap_or(false)
-    });
-
     let buffer: Vec<u32> = pixmap
         .data()
         .chunks(4)
@@ -348,6 +337,26 @@ fn main() -> Result<()> {
             (a << 24) | (b << 16) | (g << 8) | r
         })
         .collect();
+
+    let mut client = NiimbotPrinterClient::new()?;
+
+    client.heartbeat().unwrap();
+    client.heartbeat().unwrap();
+    client.heartbeat().unwrap();
+    client.heartbeat().unwrap();
+
+    client.print_label(&buffer, width as usize, height as usize, 1, 1, 5)?;
+
+    // pixmap.save_png("test.png").unwrap();
+
+    let devices = rusb::devices().unwrap();
+    // NIMBOT: 3513:0002
+    let niimbot = devices.iter().find(|d| {
+        // dbg!(d);
+        d.device_descriptor()
+            .map(|desc| desc.vendor_id() == 0x3513)
+            .unwrap_or(false)
+    });
 
     // let mut client = NiimbotPrinter::new("/dev/ttyACM0").unwrap();
     // client.connect().unwrap();
@@ -366,13 +375,13 @@ fn main() -> Result<()> {
                 handle.detach_kernel_driver(0)?;
             }
             handle.claim_interface(0)?;
-            let mut client = NiimbotPrinterClient::new(handle)?;
+            // let mut client = NiimbotPrinterClient::new()?;
 
-            client.heartbeat().unwrap();
-            client.heartbeat().unwrap();
-            client.heartbeat().unwrap();
-            client.heartbeat().unwrap();
-            client.print_label(&buffer, width as usize, height as usize, 1, 1, 5)?;
+            // client.heartbeat().unwrap();
+            // client.heartbeat().unwrap();
+            // client.heartbeat().unwrap();
+            // client.heartbeat().unwrap();
+            // client.print_label(&buffer, width as usize, height as usize, 1, 1, 5)?;
             // let transport = UsbTransport::new(handle);
             // let client = PrinterClient::new(transport);
             // client.print_image(width as usize, height as usize, &buffer, 3);
