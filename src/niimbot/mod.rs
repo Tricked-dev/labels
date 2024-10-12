@@ -1,8 +1,32 @@
+use adapters::{NiimbotPrinterAdapter, UsbAdapter};
 use color_eyre::{eyre::anyhow, Result};
 use rusb::{Context, DeviceHandle, Error as UsbError, GlobalContext, UsbContext};
 use serialport::SerialPort;
 use std::{thread::sleep, time::Duration};
-//ISSUE: starts printing but then printer stops responding and i have to replug it
+
+pub mod adapters;
+
+pub fn get_usb_adapter() -> Result<UsbAdapter> {
+    let devices = rusb::devices().unwrap();
+    // NIIMBOT B1: 3513:0002
+    let niimbot = devices.iter().find(|d| {
+        d.device_descriptor()
+            .map(|desc| desc.vendor_id() == 0x3513)
+            .unwrap_or(false)
+    });
+
+    match niimbot {
+        Some(device) => {
+            let handle = device.open()?;
+            if handle.kernel_driver_active(0)? {
+                handle.detach_kernel_driver(0)?;
+            }
+            handle.claim_interface(0)?;
+            Ok(UsbAdapter::new(handle)?)
+        }
+        None => Err(anyhow!("No Niimbot found")),
+    }
+}
 
 #[derive(Debug)]
 pub struct NiimbotPacket {
@@ -61,7 +85,7 @@ fn prepare_image(image: &[u32], width: usize, height: usize) -> Vec<Vec<u8>> {
         let mut right = 0;
 
         for (index, &pixel) in pixels.iter().enumerate() {
-            let bit = if !(pixel & 0xFF > 0) { '0' } else { '1' };
+            let bit = if (pixel & 0xFF > 0) { '0' } else { '1' };
 
             if bit == '1' {
                 if index < mid_point {
@@ -96,45 +120,6 @@ fn prepare_image(image: &[u32], width: usize, height: usize) -> Vec<Vec<u8>> {
     image_data
 }
 
-pub trait NiimbotPrinterAdapter {
-    fn send(&mut self, bytes: &[u8]) -> Result<usize>;
-    fn recv(&mut self, bytes: &mut [u8]) -> Result<usize>;
-}
-
-struct SerialPortAdapter {
-    serial_port: Box<dyn SerialPort>,
-}
-
-impl NiimbotPrinterAdapter for SerialPortAdapter {
-    fn send(&mut self, bytes: &[u8]) -> Result<usize> {
-        self.serial_port.write_all(bytes)?;
-        std::thread::sleep(Duration::from_millis(2));
-        Ok(0)
-    }
-
-    fn recv(&mut self, bytes: &mut [u8]) -> Result<usize> {
-        Ok(self.serial_port.read(bytes)?)
-    }
-}
-
-struct UsbAdapter {
-    device_handle: DeviceHandle<GlobalContext>,
-}
-
-impl NiimbotPrinterAdapter for UsbAdapter {
-    fn send(&mut self, bytes: &[u8]) -> Result<usize> {
-        Ok(self
-            .device_handle
-            .write_bulk(0x01, bytes, Duration::from_secs(1))?)
-    }
-
-    fn recv(&mut self, bytes: &mut [u8]) -> Result<usize> {
-        Ok(self
-            .device_handle
-            .read_bulk(0x81, bytes, Duration::from_secs(1))?)
-    }
-}
-
 pub struct NiimbotPrinterClient {
     pub adapter: Box<dyn NiimbotPrinterAdapter>,
 }
@@ -158,7 +143,7 @@ impl NiimbotPrinterClient {
         let end_bytes = [0xaa, 0xaa];
         let mut packet_buffer = Vec::new();
 
-        let bytes_read = self.serial_port.read(&mut buffer)?;
+        let bytes_read = self.adapter.recv(&mut buffer)?;
         // dbg!("Bytes read: {}", bytes_read);
         let mut position = 0;
         while position < bytes_read {
@@ -270,9 +255,9 @@ impl NiimbotPrinterClient {
         }
 
         // dbg!("Image Packet send!");
-        // dbg!("End Psage");
+        dbg!("End Psage");
         self.end_page_print()?;
-        // dbg!("Send Page print");
+        dbg!("Send Page print");
         while self.get_print_status()?.get("page").copied().unwrap_or(0) != label_qty.into() {
             sleep(Duration::from_millis(100));
         }
@@ -344,7 +329,7 @@ impl NiimbotPrinterClient {
         self.transceive(21, &[quantity], 1).map(|_| ())
     }
 
-    fn get_print_status(&mut self) -> Result<std::collections::HashMap<String, usize>> {
+    pub fn get_print_status(&mut self) -> Result<std::collections::HashMap<String, usize>> {
         let response = self.transceive(0xb3, &[0x01], 16)?;
         let data = response.data;
         if data.len() < 4 {
@@ -367,19 +352,4 @@ impl NiimbotPrinterClient {
         .cloned()
         .collect())
     }
-
-    // Similar implementations for other commands such as setLabelType, startPrint, etc. can be added here
 }
-
-// fn main() -> Result<()> {
-//     let mut printer = NiimbotPrinterClient::new(0x1234, 0x5678)?;
-//     let img = image::open("path/to/image.png").expect("Failed to open image");
-
-//     printer.heartbeat()?;
-//     let info = printer.get_info(1)?;
-//     println!("Printer info: {:?}", info);
-
-//     printer.print_label(img, 300, 300)?;
-
-//     Ok(())
-// }

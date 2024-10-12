@@ -1,0 +1,176 @@
+use std::{
+    fs::File,
+    io::{Cursor, Read},
+    sync::{Arc, LazyLock},
+};
+
+use bytes::Bytes;
+use color_eyre::{eyre::anyhow, Result};
+
+#[derive(Clone, Debug)]
+pub struct EfficientEntry {
+    pub path: String,
+    pub bytes: Bytes,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Data {
+    pub text: String,
+    pub x: u32,
+    pub y: u32,
+    pub size: u32,
+}
+
+mod layout_paragraph;
+use ab_glyph::{point, Font, FontArc, PxScale};
+use image_webp::WebPDecoder;
+use layout_paragraph::layout_paragraph;
+use tar_wasi::Archive;
+use tiny_skia::{Pixmap, PremultipliedColorU8};
+
+pub static BG: LazyLock<PremultipliedColorU8> =
+    LazyLock::new(|| PremultipliedColorU8::from_rgba(0, 0, 0, 0).unwrap());
+pub static FG: LazyLock<PremultipliedColorU8> =
+    LazyLock::new(|| PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap());
+
+pub fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
+    let font_data: &[u8] = include_bytes!("../../BerkeleyMonoTrial-Regular.otf");
+    let font = FontArc::try_from_slice(font_data)?;
+
+    let scale = PxScale::from((15 * size) as f32);
+
+    let scaled_font = font.as_scaled(scale);
+
+    let mut glyphs = Vec::new();
+    layout_paragraph(scaled_font, point(20.0, 20.0), 9999.0, text, &mut glyphs);
+
+    let outlined: Vec<_> = glyphs
+        .into_iter()
+        .filter_map(|g| font.outline_glyph(g))
+        .collect();
+
+    let Some(all_px_bounds) = outlined
+        .iter()
+        .map(|g| g.px_bounds())
+        .reduce(|mut b, next| {
+            b.min.x = b.min.x.min(next.min.x);
+            b.max.x = b.max.x.max(next.max.x);
+            b.min.y = b.min.y.min(next.min.y);
+            b.max.y = b.max.y.max(next.max.y);
+            b
+        })
+    else {
+        return Err(anyhow!("No outlined glyphs?"));
+    };
+
+    for glyph in outlined {
+        let bounds = glyph.px_bounds();
+        let img_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
+        let img_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
+        glyph.draw(|x, y, v| {
+            let w = pixmap.width();
+            let pos = (img_left + x + posx) as usize + (img_top + y + posy) as usize * w as usize;
+
+            let Some(px) = pixmap.pixels().get(pos) else {
+                return;
+            };
+
+            let alpha = px.alpha().saturating_add((v * 255.0) as u8);
+            let write = alpha > 128;
+            if !write {
+                // pixmap.pixels_mut()[pos] = *BG;
+                return;
+            }
+
+            pixmap.pixels_mut()[pos] = *FG;
+        });
+    }
+
+    Ok(())
+}
+
+static IMAGES: LazyLock<Vec<Arc<EfficientEntry>>> = LazyLock::new(|| {
+    let mut file = File::open("images.tar").unwrap();
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).unwrap();
+
+    let cursor = Cursor::new(buffer);
+    let mut archive = Archive::new(cursor);
+
+    archive
+        .entries()
+        .unwrap()
+        .flatten()
+        .map(|v| {
+            let path = v.path().unwrap().to_string_lossy().to_string();
+            let bytes = v.bytes().flatten().collect::<Vec<u8>>();
+            Arc::new(EfficientEntry {
+                path: path.replace(".webp", ""),
+                bytes: Bytes::from(bytes),
+            })
+        })
+        .collect()
+});
+
+fn find_icon(name: &str) -> Option<&'_ Bytes> {
+    if name.contains(":") {
+        if let Some(file) = IMAGES.iter().find(|c| c.path == name) {
+            Some(&file.bytes)
+        } else {
+            None
+        }
+    } else if let Some(file) = IMAGES.iter().find(|c| c.path.contains(name)) {
+        Some(&file.bytes)
+    } else {
+        None
+    }
+}
+
+pub fn place_item(pixmap: &mut Pixmap, data: Data) -> Result<()> {
+    match find_icon(&data.text) {
+        Some(bytes) => draw_image(pixmap, bytes, data.size, data.x, data.y),
+        None => draw_text(pixmap, &data.text, data.size, data.x, data.y),
+    }
+}
+
+fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u32) -> Result<()> {
+    let cursor = std::io::Cursor::new(image);
+    let mut decoder = WebPDecoder::new(cursor)?;
+    let (width, height) = decoder.dimensions();
+    let bytes_per_pixel = if decoder.has_alpha() { 4 } else { 3 };
+    let mut data = vec![0; width as usize * height as usize * bytes_per_pixel];
+    decoder.read_image(&mut data)?;
+
+    // let scaled_width = width * size;
+    // let scaled_height = height * size;
+
+    let pixmap_width = pixmap.width();
+    let pixmap_height = pixmap.height();
+
+    for y in 0..height {
+        for x in 0..width {
+            let index = (y as usize * width as usize + x as usize) * bytes_per_pixel;
+            let pixel = &data[index..index + bytes_per_pixel];
+            let a = pixel[3];
+
+            if a > 128 {
+                continue;
+            }
+
+            for sy in 0..size {
+                for sx in 0..size {
+                    let scaled_x = x * size + sx;
+                    let scaled_y = y * size + sy;
+
+                    if scaled_x < pixmap_width && scaled_y < pixmap_height {
+                        let pos = ((scaled_y + posy) * pixmap_width + scaled_x + posx) as usize;
+                        if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
+                            *value = *FG;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}

@@ -1,125 +1,96 @@
-use std::{clone, collections::HashMap, env, path::Path};
-
+use std::{collections::HashMap, env};
 use tinyjson::JsonValue;
-#[derive(Debug)]
-pub struct Config {
-    pub model: String,
-    pub prompt: String,
-    pub openai_api_key: String,
-    pub irc_host: String,
-    pub irc_channel: String,
-    pub irc_token: String,
-    pub irc_username: String,
-    pub width: i64,
-    pub height: i64,
-}
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            model: "gpt-4o-mini".to_string(),
-            prompt: "You extract the x y location and size from a text, the x and y can appear anywhere in the text and the size can be nothing in which case you set it to 5, remove the indication words such as Place,At and with. If x<number> is used you remove the x and set number to size".to_owned(),
-            openai_api_key: "".to_lowercase(),
-            irc_token: "".to_owned(),
-            irc_host: "irc.chat.twitch.tv".to_string(),
-            irc_username:"".to_owned(),
-            irc_channel:"".to_owned(),
-            width:500,
-            height:500,
+macro_rules! define_config {
+    ($(
+        $field:ident: $type:ty = $default:expr,
+        key: $json_key:expr
+    ),+ $(,)?) => {
+        #[derive(Debug)]
+        pub struct Config {
+            $(pub $field: $type),+
         }
-    }
-}
 
-impl Config {
-    pub fn load() -> Self {
-        let mut config = Config::default();
-
-        let parsed: HashMap<_, _> = {
-            let config_path = env::var("CONFIG_PATH").unwrap_or("config.json".to_string());
-            if let Ok(file) = std::fs::read_to_string(config_path) {
-                if let Ok(data) = file.parse::<JsonValue>() {
-                    data.get().cloned()
-                } else {
-                    None
+        impl Default for Config {
+            fn default() -> Self {
+                Self {
+                    $($field: $default),+
                 }
-            } else {
-                None
             }
         }
-        .unwrap_or_default();
 
-        if let Ok(model) = env::var("MODEL") {
-            config.model = model;
-        }
-        if let Ok(prompt) = env::var("PROMPT") {
-            config.prompt = prompt;
-        }
-        if let Ok(openai_api_key) = env::var("OPENAI_API_KEY") {
-            config.openai_api_key = openai_api_key;
-        };
+        impl Config {
+            pub fn load() -> Self {
+                let mut config = Config::default();
+                let parsed: HashMap<String, JsonValue> = Self::load_json_config();
 
-        if let Ok(irc_host) = env::var("IRC_HOST") {
-            config.irc_host = irc_host;
-        };
-        if let Ok(irc_token) = env::var("IRC_TOKEN") {
-            config.irc_token = irc_token;
-        };
-        if let Ok(irc_username) = env::var("IRC_USERNAME") {
-            config.irc_username = irc_username;
-        };
-        if let Ok(irc_channel) = env::var("IRC_CHANNEL") {
-            config.irc_channel = irc_channel;
-        };
+                $(
+                    if let Ok(value) = env::var($json_key.to_uppercase()) {
+                        config.$field = value.parse().unwrap_or(config.$field);
+                    } else if let Some(value) = parsed.get($json_key) {
+                        config.$field = value.get().cloned().unwrap_or(config.$field);
+                    }
+                )+
 
-        if let Ok(width) = env::var("WIDTH") {
-            config.width = width.parse().unwrap();
-        }
+                config.validate();
+                config
+            }
 
-        if let Ok(height) = env::var("HEIGHT") {
-            config.height = height.parse().unwrap();
-        }
+            fn load_json_config() -> HashMap<String, JsonValue> {
+                let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.json".to_string());
+                std::fs::read_to_string(config_path)
+                    .ok()
+                    .and_then(|file| file.parse::<JsonValue>().ok())
+                    .and_then(|data| data.get().cloned())
+                    .unwrap_or_default()
+            }
 
-        // JSON VALUES
+            fn validate(&self) {
+                if self.openai_api_key.is_empty() {
+                    panic!("No OpenAI API key found");
+                }
+                if self.irc_token.is_empty() {
+                    panic!("No IRC token found");
+                }
+                if self.irc_username.is_empty() {
+                    panic!("No IRC username found");
+                }
+            }
+        }
+    };
+}
 
-        if let Some(model) = parsed.get("model") {
-            config.model = model.get::<String>().unwrap().to_string();
-        }
-        if let Some(prompt) = parsed.get("prompt") {
-            config.prompt = prompt.get::<String>().unwrap().to_string();
-        }
-        if let Some(openai_api_key) = parsed.get("openai_api_key") {
-            config.openai_api_key = openai_api_key.get::<String>().unwrap().to_string();
-        }
-        if let Some(irc_token) = parsed.get("irc_token") {
-            config.irc_token = irc_token.get::<String>().unwrap().to_string();
-        }
-        if let Some(irc_host) = parsed.get("irc_host") {
-            config.irc_host = irc_host.get::<String>().unwrap().to_string();
-        }
-        if let Some(irc_username) = parsed.get("irc_username") {
-            config.irc_username = irc_username.get::<String>().unwrap().to_string();
-        }
-        if let Some(irc_channel) = parsed.get("irc_channel") {
-            config.irc_channel = irc_channel.get::<String>().unwrap().to_string();
-        }
+define_config! {
+    model: String = "gpt-4o-mini".to_string(),
+    key: "model",
 
-        if let Some(width) = parsed.get("width") {
-            config.width = width.get::<f64>().unwrap().round() as i64;
-        }
-        if let Some(height) = parsed.get("height") {
-            config.height = height.get::<f64>().unwrap().round() as i64;
-        }
+    prompt: String = "You extract the x y location and size from a text, the x and y can appear anywhere in the text and the size can be nothing in which case you set it to 5, remove the indication words such as Place,At and with. If x<number> is used you remove the x and set number to size".to_owned(),
+    key: "prompt",
 
-        if config.openai_api_key.is_empty() {
-            panic!("No OpenAI API key found");
-        };
-        if config.irc_token.is_empty() {
-            panic!("No IRC token found");
-        };
-        if config.irc_username.is_empty() {
-            panic!("No IRC username found");
-        };
+    openai_api_key: String = String::new(),
+    key: "openai_api_key",
 
-        config
-    }
+    irc_host: String = "irc.chat.twitch.tv".to_string(),
+    key: "irc_host",
+
+    irc_channel: String = String::new(),
+    key: "irc_channel",
+
+    irc_token: String = String::new(),
+    key: "irc_token",
+
+    irc_username: String = String::new(),
+    key: "irc_username",
+
+    irc_port: f64 = 6697.0,
+    key: "irc_port",
+
+    width: f64 = 500.0,
+    key: "width",
+
+    height: f64 = 500.0,
+    key: "height",
+
+    notify_url: String = String::new(),
+    key: "notify_url",
 }

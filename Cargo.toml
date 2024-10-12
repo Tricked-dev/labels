@@ -7,7 +7,6 @@ edition = "2021"
 tiny-skia = { version = "0.11.4", default-features = false, features = [
     "simd",
     "std",
-    "png-format",
 ] }
 minifb = { version = "0.27.0", default-features = false, features = ["x11"] }
 ab_glyph = "0.2.29"
@@ -18,12 +17,13 @@ attohttpc = { version = "0.28.0", default-features = false, features = [
     "tls-rustls-webpki-roots",
 ] }
 tinyjson = "2.5.1"
-anyhow = "1.0.89"
 rustls = "0.23.14"
 rustls-native-certs = "0.8.0"
 rusb = "0.9.4"
 color-eyre = "0.6.3"
 serialport = "4.5.1"
+log = "0.4.22"
+env_logger = "0.11.5"
 
 [profile.release]
 panic = "abort"
