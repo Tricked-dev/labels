@@ -26,14 +26,10 @@ use ab_glyph::{point, Font, FontArc, PxScale};
 use image_webp::WebPDecoder;
 use layout_paragraph::layout_paragraph;
 use tar_wasi::Archive;
-use tiny_skia::{Pixmap, PremultipliedColorU8};
 
-pub static BG: LazyLock<PremultipliedColorU8> =
-    LazyLock::new(|| PremultipliedColorU8::from_rgba(0, 0, 0, 0).unwrap());
-pub static FG: LazyLock<PremultipliedColorU8> =
-    LazyLock::new(|| PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap());
+use crate::CONFIG;
 
-pub fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
+pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
     let font_data: &[u8] = include_bytes!("../../BerkeleyMonoTrial-Regular.otf");
     let font = FontArc::try_from_slice(font_data)?;
 
@@ -63,26 +59,26 @@ pub fn draw_text(pixmap: &mut Pixmap, text: &str, size: u32, posx: u32, posy: u3
         return Err(anyhow!("No outlined glyphs?"));
     };
 
+    let w = CONFIG.width as u32;
+
     for glyph in outlined {
         let bounds = glyph.px_bounds();
         let img_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
         let img_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
         glyph.draw(|x, y, v| {
-            let w = pixmap.width();
             let pos = (img_left + x + posx) as usize + (img_top + y + posy) as usize * w as usize;
 
-            let Some(px) = pixmap.pixels().get(pos) else {
+            if pixmap.get(pos).is_none() {
                 return;
             };
 
-            let alpha = px.alpha().saturating_add((v * 255.0) as u8);
-            let write = alpha > 128;
+            let write = v > 0.5;
             if !write {
                 // pixmap.pixels_mut()[pos] = *BG;
                 return;
             }
 
-            pixmap.pixels_mut()[pos] = *FG;
+            pixmap[pos] = u32::MIN;
         });
     }
 
@@ -126,14 +122,14 @@ fn find_icon(name: &str) -> Option<&'_ Bytes> {
     }
 }
 
-pub fn place_item(pixmap: &mut Pixmap, data: Data) -> Result<()> {
+pub fn place_item(pixmap: &mut [u32], data: Data) -> Result<()> {
     match find_icon(&data.text) {
         Some(bytes) => draw_image(pixmap, bytes, data.size, data.x, data.y),
         None => draw_text(pixmap, &data.text, data.size, data.x, data.y),
     }
 }
 
-fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u32) -> Result<()> {
+fn draw_image(pixmap: &mut [u32], image: &Bytes, size: u32, posx: u32, posy: u32) -> Result<()> {
     let cursor = std::io::Cursor::new(image);
     let mut decoder = WebPDecoder::new(cursor)?;
     let (width, height) = decoder.dimensions();
@@ -144,8 +140,8 @@ fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u3
     // let scaled_width = width * size;
     // let scaled_height = height * size;
 
-    let pixmap_width = pixmap.width();
-    let pixmap_height = pixmap.height();
+    let pixmap_width = CONFIG.width as u32;
+    let pixmap_height = CONFIG.height as u32;
 
     for y in 0..height {
         for x in 0..width {
@@ -164,8 +160,8 @@ fn draw_image(pixmap: &mut Pixmap, image: &Bytes, size: u32, posx: u32, posy: u3
 
                     if scaled_x < pixmap_width && scaled_y < pixmap_height {
                         let pos = ((scaled_y + posy) * pixmap_width + scaled_x + posx) as usize;
-                        if let Some(value) = pixmap.pixels_mut().get_mut(pos) {
-                            *value = *FG;
+                        if let Some(value) = pixmap.get_mut(pos) {
+                            *value = u32::MIN;
                         }
                     }
                 }

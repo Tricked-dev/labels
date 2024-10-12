@@ -6,10 +6,9 @@ use std::{env, thread};
 use ai::text_to_data;
 use circe::Client;
 use color_eyre::Result;
-use drawing::{draw_text, place_item, Data, BG};
+use drawing::{place_item, Data};
 use minifb::{Key, Scale, Window, WindowOptions};
 use niimbot::{get_usb_adapter, NiimbotPrinterClient};
-use tiny_skia::{Color, Pixmap};
 
 mod ai;
 mod circe;
@@ -36,8 +35,9 @@ enum PrinterCommand {
 }
 
 fn main() -> Result<()> {
+    color_eyre::install()?;
     if env::var("RUST_LOG").is_err() {
-        env::set_var("RUST_LOG", "info");
+        env::set_var("RUST_LOG", "debug");
     }
 
     let running = Arc::new(AtomicBool::new(true));
@@ -46,8 +46,6 @@ fn main() -> Result<()> {
     dbg!(&*CONFIG);
     let width = CONFIG.width;
     let height = CONFIG.height;
-
-    let mut pixmap = Pixmap::new(width as u32, height as u32).unwrap();
 
     let mut window = Window::new(
         "H",
@@ -72,59 +70,58 @@ fn main() -> Result<()> {
 
     let running_thread = Arc::clone(&running);
 
-    // let printer_thread = std::thread::spawn(move || {
-    //     let tx = tx_clone;
-    //     let mut last_hb = Instant::now();
-    //     let mut printer_task = || {
-    //         let mut printer = NiimbotPrinterClient::new(Box::new(get_usb_adapter()?))?;
-    //         printer.heartbeat()?;
+    let printer_thread = std::thread::spawn(move || {
+        let tx = tx_clone;
+        let mut last_hb = Instant::now();
+        let mut printer_task = || {
+            let mut printer = NiimbotPrinterClient::new(Box::new(get_usb_adapter()?))?;
+            printer.heartbeat()?;
 
-    //         while running_thread.load(Ordering::Relaxed) {
-    //             let now = Instant::now();
-    //             if now.duration_since(last_hb) > Duration::from_secs(15) {
-    //                 last_hb = now;
-    //                 printer.heartbeat()?;
-    //             }
+            while running_thread.load(Ordering::Relaxed) {
+                let now = Instant::now();
+                if now.duration_since(last_hb) > Duration::from_secs(15) {
+                    last_hb = now;
+                    printer.heartbeat()?;
+                }
 
-    //             if let Ok(data) = printer_rx.try_recv() {
-    //                 match data {
-    //                     PrinterCommand::Print(data) => {
-    //                         // printer.print_label(
-    //                         //     &data,
-    //                         //     CONFIG.width as usize,
-    //                         //     CONFIG.height as usize,
-    //                         //     1,
-    //                         //     1,
-    //                         //     5,
-    //                         // )?;
-    //                     }
-    //                 }
-    //             }
+                if let Ok(data) = printer_rx.try_recv() {
+                    match data {
+                        PrinterCommand::Print(data) => {
+                            printer.print_label(
+                                &data,
+                                CONFIG.width as usize,
+                                CONFIG.height as usize,
+                                1,
+                                1,
+                                5,
+                            )?;
+                        }
+                    }
+                }
+                thread::sleep(Duration::from_millis(500));
+            }
 
-    //             thread::sleep(Duration::from_millis(500));
-    //         }
+            Ok(())
+        };
+        let out: Result<()> = printer_task();
 
-    //         Ok(())
-    //     };
-    //     let out: Result<()> = printer_task();
-
-    //     running_thread.store(false, Ordering::Relaxed);
-    //     tx.send(UICommand::Quit).ok();
-    //     if let Err(e) = out {
-    //         log::error!("Error in printer thread: {:?}", e);
-    //         if !CONFIG.notify_url.is_empty() {
-    //             ntfy::NotifyBuilder::new(format!("Error in printer thread: {:?}", e))
-    //                 .send(&CONFIG.notify_url)
-    //                 .expect("Failed to send notification");
-    //         }
-    //     }
-    // });
+        running_thread.store(false, Ordering::Relaxed);
+        tx.send(UICommand::Quit).ok();
+        if let Err(e) = out {
+            log::error!("Error in printer thread: {:?}", e);
+            if !CONFIG.notify_url.is_empty() {
+                ntfy::NotifyBuilder::new(format!("Error in printer thread: {:?}", e))
+                    .send(&CONFIG.notify_url)
+                    .expect("Failed to send notification");
+            }
+        }
+    });
 
     let tx_clone = tx.clone();
 
     let running_thread = Arc::clone(&running);
 
-    let irc_thread = std::thread::spawn(move || {
+    std::thread::spawn(move || {
         let tx = tx_clone;
 
         let result = || {
@@ -158,7 +155,6 @@ fn main() -> Result<()> {
                     circe::commands::Command::QUIT(message) => {
                         println!("QUIT received from {}", message);
                     }
-
                     _ => {}
                 }
             }
@@ -182,7 +178,7 @@ fn main() -> Result<()> {
 
     let counting_thread = std::thread::spawn(move || {
         let mut iter = 0;
-        let count = 60 * 5;
+        let count = CONFIG.clock_time as usize;
         while running_thread.load(Ordering::Relaxed) {
             if iter == count {
                 tx.send(UICommand::Clear).ok();
@@ -194,74 +190,43 @@ fn main() -> Result<()> {
         }
     });
 
-    pixmap.fill(Color::from_rgba8(
-        BG.red(),
-        BG.green(),
-        BG.blue(),
-        BG.alpha(),
-    ));
+    window.set_target_fps(60);
 
-    // draw_text(&mut pixmap, "", 5, 0, 0);
-    // draw_text(&mut pixmap, "Hello Worldx", 5, 0, 0);
-
-    let buffer: Vec<u32> = pixmap
-        .data()
-        .chunks(4)
-        .map(|rgba| {
-            let r = 255 - rgba[0] as u32;
-            let g = 255 - rgba[1] as u32;
-            let b = 255 - rgba[2] as u32;
-            let a = rgba[3] as u32; // Keep the alpha value the same
-            (a << 24) | (b << 16) | (g << 8) | r
-        })
-        .collect();
-
-    window.update_with_buffer(&buffer, width as usize, height as usize)?;
+    let mut label_data: Vec<u32> = vec![u32::MAX; CONFIG.width() * CONFIG.height()];
 
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
-        let buffer: Vec<u32> = pixmap
-            .data()
-            .chunks(4)
-            .map(|rgba| {
-                let r = 255 - rgba[0] as u32;
-                let g = 255 - rgba[1] as u32;
-                let b = 255 - rgba[2] as u32;
-                let a = rgba[3] as u32; // Keep the alpha value the same
-                (a << 24) | (b << 16) | (g << 8) | r
-            })
-            .collect();
-        match rx.recv().unwrap() {
-            UICommand::Clear => {
-                pixmap.fill(Color::from_rgba8(
-                    BG.red(),
-                    BG.green(),
-                    BG.blue(),
-                    BG.alpha(),
-                ));
-                if printer_tx
-                    .send(PrinterCommand::Print(buffer.clone()))
-                    .is_err()
+        match rx.try_recv() {
+            Ok(UICommand::Clear) => {
+                if label_data.iter().any(|&v| v != u32::MAX)
+                    && printer_tx
+                        .send(PrinterCommand::Print(label_data.clone()))
+                        .is_err()
                 {
                     log::error!("Sending Failed Printer thread might be dead?");
                     break;
                 }
+                label_data.fill(u32::MAX);
             }
-            UICommand::Draw(data) => {
-                place_item(&mut pixmap, data)?;
-
-                window.update_with_buffer(&buffer, width as usize, height as usize)?;
+            Ok(UICommand::Draw(data)) => {
+                place_item(&mut label_data, data)?;
             }
-            UICommand::Quit => {
+            Ok(UICommand::Quit) => {
+                dbg!("Quit Received");
                 break;
             }
+            Err(..) => {}
         }
 
-        std::thread::sleep(Duration::from_millis(10));
+        window.update_with_buffer(&label_data, width as usize, height as usize)?;
     }
 
-    irc_thread.join().unwrap();
-    counting_thread.join().unwrap();
-    // printer_thread.join().unwrap();
+    dbg!("Exiting!");
 
+    log::debug!("Ending counting thread");
+    counting_thread.join().unwrap();
+    log::debug!("Ending printer thread");
+    printer_thread.join().unwrap();
+    log::debug!("Ending IRC thread");
+    // yeah uh irc thread doesn't want to join cause the read operation blocks for forever so we can just exit the process bye twitch :wave:
     Ok(())
 }

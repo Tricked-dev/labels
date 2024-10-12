@@ -73,4 +73,15 @@ define_config! {
     width: f64 = 500.0,
     height: f64 = 500.0,
     notify_url: String = String::new(),
+    clock_time: f64 = 60.0 * 5.0
+}
+
+impl Config {
+    pub fn height(&self) -> usize {
+        (self.height) as usize
+    }
+
+    pub fn width(&self) -> usize {
+        (self.width) as usize
+    }
 }

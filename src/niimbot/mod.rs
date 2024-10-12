@@ -53,7 +53,6 @@ impl NiimbotPacket {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        dbg!(self.data.len());
         let mut bytes = vec![0x55, 0x55, self.packet_type, self.data.len() as u8];
         bytes.extend(&self.data);
 
@@ -178,10 +177,7 @@ impl NiimbotPrinterClient {
     }
 
     pub fn heartbeat(&mut self) -> Result<()> {
-        let response = self.transceive(220, &[0x01], 1)?;
-        // Process the response data
-        println!("Heartbeat response: {:?}", response);
-
+        self.transceive(220, &[0x01], 1)?;
         Ok(())
     }
 
@@ -218,7 +214,7 @@ impl NiimbotPrinterClient {
             std::thread::sleep(Duration::from_millis(200));
         }
 
-        Err(anyhow!("No response"))
+        Err(anyhow!("No response"))?
     }
 
     pub fn print_label(

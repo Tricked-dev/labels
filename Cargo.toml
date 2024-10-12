@@ -4,10 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tiny-skia = { version = "0.11.4", default-features = false, features = [
-    "simd",
-    "std",
-] }
 minifb = { version = "0.27.0", default-features = false, features = ["x11"] }
 ab_glyph = "0.2.29"
 image-webp = "0.2.0"
@@ -20,7 +16,7 @@ tinyjson = "2.5.1"
 rustls = "0.23.14"
 rustls-native-certs = "0.8.0"
 rusb = "0.9.4"
-color-eyre = "0.6.3"
+color-eyre = { version = "0.6.3", default-features = false }
 serialport = "4.5.1"
 log = "0.4.22"
 env_logger = "0.11.5"
@@ -37,6 +33,6 @@ opt-level = 3
 [profile.dev.package.tar-wasi]
 opt-level = 3
 
-# [workspace]
-# resolver = "2"
-# members = [".", "iconTools/tools"]
+[workspace]
+resolver = "2"
+members = [".", "iconTools/tools"]
