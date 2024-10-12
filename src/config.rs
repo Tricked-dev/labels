@@ -3,8 +3,7 @@ use tinyjson::JsonValue;
 
 macro_rules! define_config {
     ($(
-        $field:ident: $type:ty = $default:expr,
-        key: $json_key:expr
+        $field:ident: $type:ty = $default:expr
     ),+ $(,)?) => {
         #[derive(Debug)]
         pub struct Config {
@@ -25,9 +24,10 @@ macro_rules! define_config {
                 let parsed: HashMap<String, JsonValue> = Self::load_json_config();
 
                 $(
-                    if let Ok(value) = env::var($json_key.to_uppercase()) {
+                    let key = stringify!($field);
+                    if let Ok(value) = env::var(key.to_uppercase()) {
                         config.$field = value.parse().unwrap_or(config.$field);
-                    } else if let Some(value) = parsed.get($json_key) {
+                    } else if let Some(value) = parsed.get(key) {
                         config.$field = value.get().cloned().unwrap_or(config.$field);
                     }
                 )+
@@ -62,35 +62,15 @@ macro_rules! define_config {
 
 define_config! {
     model: String = "gpt-4o-mini".to_string(),
-    key: "model",
-
     prompt: String = "You extract the x y location and size from a text, the x and y can appear anywhere in the text and the size can be nothing in which case you set it to 5, remove the indication words such as Place,At and with. If x<number> is used you remove the x and set number to size".to_owned(),
-    key: "prompt",
 
     openai_api_key: String = String::new(),
-    key: "openai_api_key",
-
     irc_host: String = "irc.chat.twitch.tv".to_string(),
-    key: "irc_host",
-
     irc_channel: String = String::new(),
-    key: "irc_channel",
-
     irc_token: String = String::new(),
-    key: "irc_token",
-
     irc_username: String = String::new(),
-    key: "irc_username",
-
     irc_port: f64 = 6697.0,
-    key: "irc_port",
-
     width: f64 = 500.0,
-    key: "width",
-
     height: f64 = 500.0,
-    key: "height",
-
     notify_url: String = String::new(),
-    key: "notify_url",
 }

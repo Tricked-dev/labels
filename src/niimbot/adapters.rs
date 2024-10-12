@@ -1,6 +1,6 @@
 use color_eyre::Result;
 use rusb::{DeviceHandle, GlobalContext};
-use serialport::{SerialPort, SerialPortBuilder};
+use serialport::SerialPort;
 use std::time::Duration;
 
 pub trait NiimbotPrinterAdapter {

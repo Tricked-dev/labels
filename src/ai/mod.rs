@@ -43,9 +43,9 @@ pub fn text_to_data(text: &str) -> Result<Data> {
     let body = [
         r##"
 {
-  "model": """##,
+  "model": ""##,
         &CONFIG.model,
-        r##""",
+        r##"",
   "messages": [
     {
       "role": "system",
@@ -102,6 +102,6 @@ pub fn text_to_data(text: &str) -> Result<Data> {
         .send()?;
 
     let data = parse_json_to_data(req.text()?.as_str()).ok_or(anyhow!("Failed to parse JSON"))?;
-
+    log::info!("Data: {:?}", data);
     Ok(data)
 }

@@ -1,6 +1,5 @@
 use adapters::{NiimbotPrinterAdapter, UsbAdapter};
 use color_eyre::{eyre::anyhow, Result};
-use rusb::{Context, DeviceHandle, Error as UsbError, GlobalContext, UsbContext};
 use serialport::SerialPort;
 use std::{thread::sleep, time::Duration};
 
@@ -36,7 +35,7 @@ pub struct NiimbotPacket {
 
 impl NiimbotPacket {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        if &bytes[..2] != &[0x55, 0x55] || &bytes[bytes.len() - 2..] != &[0xaa, 0xaa] {
+        if bytes[..2] != [0x55, 0x55] || bytes[bytes.len() - 2..] != [0xaa, 0xaa] {
             return Err("Invalid packet boundaries".to_string());
         }
 
@@ -85,7 +84,7 @@ fn prepare_image(image: &[u32], width: usize, height: usize) -> Vec<Vec<u8>> {
         let mut right = 0;
 
         for (index, &pixel) in pixels.iter().enumerate() {
-            let bit = if (pixel & 0xFF > 0) { '0' } else { '1' };
+            let bit = if pixel & 0xFF > 0 { '0' } else { '1' };
 
             if bit == '1' {
                 if index < mid_point {
@@ -110,9 +109,9 @@ fn prepare_image(image: &[u32], width: usize, height: usize) -> Vec<Vec<u8>> {
         header[0..2].copy_from_slice(&(y as u16).to_be_bytes());
         // header[2] = 0;
         // header[3] = 0;
-        header[2] = (mid_point as i32 - left as i32) as u8;
-        header[3] = (mid_point as i32 - right as i32) as u8;
-        header[4..6].copy_from_slice(&(1 as u16).to_be_bytes());
+        header[2] = (mid_point as i32 - left) as u8;
+        header[3] = (mid_point as i32 - right) as u8;
+        header[4..6].copy_from_slice(&1_u16.to_be_bytes());
 
         image_data.push([header.to_vec(), line_data].concat());
     }
@@ -258,7 +257,13 @@ impl NiimbotPrinterClient {
         dbg!("End Psage");
         self.end_page_print()?;
         dbg!("Send Page print");
-        while self.get_print_status()?.get("page").copied().unwrap_or(0) != label_qty.into() {
+        while self
+            .get_print_status(label_qty as usize)?
+            .get("page")
+            .copied()
+            .unwrap_or(0)
+            != label_qty.into()
+        {
             sleep(Duration::from_millis(100));
         }
         dbg!("End Print");
@@ -329,8 +334,25 @@ impl NiimbotPrinterClient {
         self.transceive(21, &[quantity], 1).map(|_| ())
     }
 
-    pub fn get_print_status(&mut self) -> Result<std::collections::HashMap<String, usize>> {
-        let response = self.transceive(0xb3, &[0x01], 16)?;
+    pub fn get_print_status(
+        &mut self,
+        quantity: usize,
+    ) -> Result<std::collections::HashMap<String, usize>> {
+        // dumbass printer stop responding to print status packets after its done printing but that is usually ver7 quickly
+        let response = match self.transceive(0xb3, &[0x01], 16) {
+            Ok(d) => d,
+            Err(e) => {
+                log::error!("Failed to get print status: {:?}", e);
+                return Ok([
+                    ("page".into(), quantity),
+                    ("progress1".into(), 100),
+                    ("progress2".into(), 100),
+                ]
+                .iter()
+                .cloned()
+                .collect());
+            }
+        };
         let data = response.data;
         if data.len() < 4 {
             return Err(anyhow!("Invalid response"));
@@ -338,10 +360,6 @@ impl NiimbotPrinterClient {
         let page = u16::from_be_bytes([data[0], data[1]]) as usize;
         let progress1 = data[2] as usize;
         let progress2 = data[3] as usize;
-
-        dbg!(page);
-        dbg!(progress1);
-        dbg!(progress2);
 
         Ok([
             ("page".into(), page),
