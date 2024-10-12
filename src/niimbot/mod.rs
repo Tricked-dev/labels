@@ -226,33 +226,25 @@ impl NiimbotPrinterClient {
         label_type: u8,
         label_density: u8,
     ) -> Result<()> {
-        // Resize and rotate the image if necessary
-        // let packets = NiimbotPrinterClient::naive_encoder(width, height, image);
-
         self.set_label_type(label_type)?;
         self.set_label_density(label_density)?;
-        println!("Starting print");
+        log::debug!("Starting print");
         self.start_print()?;
-        // self.allow_print_clear()?;
-        println!("Starting page print");
+        log::debug!("Starting page print");
         self.start_page_print()?;
-        println!("Setting page size");
+        log::debug!("Setting page size");
 
         self.set_page_size_v3(height as u16, width as u16, label_qty as u16)?;
-        // self.set_dimension(width as u16, height as u16)?;
-        // self.set_quantity(label_qty)?;
 
-        // Convert the image to packets using naive_encoder and send them
         let packets = NiimbotPrinterClient::naive_encoder(width, height, image);
         dbg!(packets.len());
         for packet in packets {
             self.send(packet)?;
         }
 
-        // dbg!("Image Packet send!");
-        dbg!("End Psage");
+        log::debug!("Start Print");
         self.end_page_print()?;
-        dbg!("Send Page print");
+        log::debug!("Get Status");
         while self
             .get_print_status(label_qty as usize)?
             .get("page")
@@ -262,10 +254,7 @@ impl NiimbotPrinterClient {
         {
             sleep(Duration::from_millis(100));
         }
-        dbg!("End Print");
-        // self.end_page_print()?;
-
-        // // dbg!("End print!");
+        log::debug!("End Print");
         self.end_print()?;
 
         Ok(())
