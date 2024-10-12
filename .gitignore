@@ -7,3 +7,10 @@ mode.onnx.data
 config.json
 examples.txt
 images/
+data1.txt
+data1parsed.txt
+data2.txt
+data2parsed.txt
+download.png
+out.webp
+parse.js

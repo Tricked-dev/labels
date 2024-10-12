@@ -295,6 +295,19 @@ enum UICommand {
     Quit,
 }
 
+#[test]
+fn test_starting() {
+    let expected = [0x00, 0xf0, 0x01, 0x90, 0x00, 0x01].to_vec();
+    let bytes: Vec<u8> = [
+        (240 as u16).to_be_bytes(),
+        (400 as u16).to_be_bytes(),
+        (1 as u16).to_be_bytes(),
+    ]
+    .concat();
+
+    assert_eq!(bytes, expected);
+}
+
 static SHOULD_QUIT: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 fn main() -> Result<()> {
@@ -338,6 +351,25 @@ fn main() -> Result<()> {
         })
         .collect();
 
+    // let mut decoder =
+    //     WebPDecoder::new(Cursor::new(include_bytes!("../out.webp").to_vec())).unwrap();
+
+    // // .output_buffer_size()
+    // let mut buffer = vec![0; decoder.output_buffer_size().unwrap()];
+    // decoder.read_image(&mut buffer).unwrap();
+
+    // dbg!(decoder.has_alpha());
+
+    // let buffer: Vec<u32> = buffer
+    //     .chunks(3)
+    //     .map(|rgba| {
+    //         let r = 255 - rgba[0] as u32;
+    //         let g = 255 - rgba[1] as u32;
+    //         let b = 255 - rgba[2] as u32;
+    //         // let a = rgba[3] as u32; // Keep the alpha value the same
+    //         ((if r > 128 { 255 } else { 0 }) << 24) | (b << 16) | (g << 8) | r
+    //     })
+    //     .collect();
     let mut client = NiimbotPrinterClient::new()?;
 
     client.heartbeat().unwrap();
@@ -370,12 +402,12 @@ fn main() -> Result<()> {
     // client.print_image(&buffer, width as u16, height as u16, 1, 1)?;
     match niimbot {
         Some(device) => {
-            let handle = device.open()?;
-            if handle.kernel_driver_active(0)? {
-                handle.detach_kernel_driver(0)?;
-            }
-            handle.claim_interface(0)?;
-            // let mut client = NiimbotPrinterClient::new()?;
+            // let handle = device.open()?;
+            // if handle.kernel_driver_active(0)? {
+            //     handle.detach_kernel_driver(0)?;
+            // }
+            // handle.claim_interface(0)?;
+            // let mut client = NiimbotPrinterClient::new(handle)?;
 
             // client.heartbeat().unwrap();
             // client.heartbeat().unwrap();
