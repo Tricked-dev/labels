@@ -284,7 +284,12 @@ fn main() -> Result<()> {
                 label_data.fill(u32::MAX);
             }
             Ok(UICommand::Draw(data)) => {
-                place_item(&mut label_data, data)?;
+                if let Err(e) = place_item(&mut label_data, data) {
+                    log::error!("Failed to place item: {:?}", e);
+                    ntfy::NotifyBuilder::new(format!("Failed to place item: {:?}", e))
+                        .set_priority("low".to_owned())
+                        .send(&CONFIG.notify_url)?;
+                }
             }
             Ok(UICommand::Quit) => {
                 dbg!("Quit Received");
