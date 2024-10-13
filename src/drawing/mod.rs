@@ -33,7 +33,7 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
     let font_data: &[u8] = include_bytes!("../../BerkeleyMonoTrial-Regular.otf");
     let font = FontArc::try_from_slice(font_data)?;
 
-    let scale = PxScale::from((15 * size) as f32);
+    let scale = PxScale::from((12 * size) as f32);
 
     let scaled_font = font.as_scaled(scale);
 

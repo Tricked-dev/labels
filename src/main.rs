@@ -104,14 +104,38 @@ fn main() -> Result<()> {
                 if let Ok(data) = printer_rx.try_recv() {
                     match data {
                         PrinterCommand::Print(data) => {
-                            printer.print_label(
+                            if let Err(printer_e) = printer.print_label(
                                 &data,
                                 CONFIG.width as usize,
                                 CONFIG.height as usize,
                                 1,
                                 1,
                                 5,
-                            )?;
+                            ) {
+                                log::error!("Error printing: {:?}", printer_e);
+                                log::debug!(
+                                    "Waiting 500ms to send heartbeat to see if printer is dead"
+                                );
+                                thread::sleep(Duration::from_millis(500));
+                                match printer.heartbeat() {
+                                    Ok(_) => {
+                                        log::debug!(
+                                            "Heartbeat successful, everything might just be fine"
+                                        );
+                                    }
+                                    Err(e) => {
+                                        log::error!("Heartbeat failed: {:?}", e);
+                                        log::debug!("Retrying heartbeat in 500ms");
+                                        thread::sleep(Duration::from_millis(500));
+                                        if let Err(e) = printer.heartbeat() {
+                                            log::error!("Failed to heartbeat printer, exiting");
+                                            Err(anyhow!(
+                                                "Heartbeat failed after printing multiple times exiting\n{e:?}\n\nprinter error: {printer_e:?}",
+                                            ))?;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
