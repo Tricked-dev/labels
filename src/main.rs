@@ -5,6 +5,7 @@ use std::{env, thread};
 
 use ai::text_to_data;
 use circe::Client;
+use color_eyre::eyre::anyhow;
 use color_eyre::Result;
 use drawing::{place_item, Data};
 use minifb::{Key, Scale, Window, WindowOptions};
@@ -77,11 +78,23 @@ fn main() -> Result<()> {
             let mut printer = NiimbotPrinterClient::new(Box::new(get_usb_adapter()?))?;
             printer.heartbeat()?;
 
+            let mut hb_failures = 0;
+
             while running_thread.load(Ordering::Relaxed) {
                 let now = Instant::now();
                 if now.duration_since(last_hb) > Duration::from_secs(15) {
                     last_hb = now;
-                    printer.heartbeat()?;
+                    if let Err(e) = printer.heartbeat() {
+                        hb_failures += 1;
+                        if hb_failures > 5 {
+                            log::error!("Failed to heartbeat printer, exiting");
+                            Err(anyhow!(
+                                "Failed to heartbeat printer 5 times, exiting\n{e:?}",
+                            ))?;
+                        }
+                    } else {
+                        hb_failures = 0;
+                    }
                 }
 
                 if let Ok(data) = printer_rx.try_recv() {
@@ -237,7 +250,7 @@ fn main() -> Result<()> {
     counting_thread.join().unwrap();
     log::debug!("Ending printer thread");
     printer_thread.join().unwrap();
-    log::debug!("Ending IRC thread");
+    log::debug!("Ending IRC thread, jk im killing it");
     // yeah uh irc thread doesn't want to join cause the read operation blocks for forever so we can just exit the process bye twitch :wave:
     Ok(())
 }
