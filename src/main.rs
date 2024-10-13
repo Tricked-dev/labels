@@ -22,6 +22,7 @@ mod ntfy;
 mod tests;
 
 use config::Config;
+use rustrict::{Censor, Type};
 
 static CONFIG: LazyLock<Config> = LazyLock::new(Config::load);
 
@@ -86,6 +87,9 @@ fn main() -> Result<()> {
                     last_hb = now;
                     if let Err(e) = printer.heartbeat() {
                         hb_failures += 1;
+                        log::warn!(
+                            "Failed to heartbeat printer, retrying: {e:?}, failures: {hb_failures}"
+                        );
                         if hb_failures > 5 {
                             log::error!("Failed to heartbeat printer, exiting");
                             Err(anyhow!(
@@ -164,8 +168,30 @@ fn main() -> Result<()> {
 
                 match line {
                     circe::commands::Command::PRIVMSG(nick, channel, message) => {
-                        println!("PRIVMSG received from {}: {} {}", nick, channel, message);
-                        tx.send(UICommand::Draw(text_to_data(&message)?))?;
+                        let analysis = Censor::from_str(
+                            "Hello World testing this should be very safe jij bent slim you are smart",
+                        )
+                            .with_censor_threshold(Type::INAPPROPRIATE)
+                            .with_censor_first_character_threshold(Type::OFFENSIVE & Type::SEVERE)
+                            .with_ignore_false_positives(false)
+                            .with_ignore_self_censoring(false)
+                            .with_censor_replacement('*')
+                            .analyze();
+                        if analysis.is(Type::INAPPROPRIATE) {
+                            client.privmsg(
+                                &CONFIG.irc_channel,
+                                &format!(":Hey {}, i will not print that", nick),
+                            )?;
+                            log::warn!(
+                                "PRIVMSG received from {}: {} {} is {analysis:?}, will not print",
+                                nick,
+                                channel,
+                                message
+                            );
+                        } else {
+                            log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
+                            tx.send(UICommand::Draw(text_to_data(&message)?))?;
+                        }
                     }
                     circe::commands::Command::QUIT(message) => {
                         println!("QUIT received from {}", message);
