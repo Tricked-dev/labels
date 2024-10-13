@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use color_eyre::Result;
 use rusb::{DeviceHandle, GlobalContext};
 use serialport::SerialPort;

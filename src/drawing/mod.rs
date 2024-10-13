@@ -116,15 +116,18 @@ static IMAGES: LazyLock<Vec<Arc<EfficientEntry>>> = LazyLock::new(|| {
 fn find_icon(name: &str) -> Option<&'_ Bytes> {
     if name.contains(":") {
         if let Some(file) = IMAGES.iter().find(|c| c.path == name) {
-            Some(&file.bytes)
-        } else {
-            None
+            log::debug!("Found image name: {}", file.path);
+            return Some(&file.bytes);
         }
-    } else if let Some(file) = IMAGES.iter().find(|c| c.path.contains(name)) {
-        Some(&file.bytes)
-    } else {
-        None
+    } else if let Some(file) = IMAGES
+        .iter()
+        .find(|c| c.path.split(":").last().unwrap() == name)
+    {
+        log::debug!("Found image name: {}", file.path);
+        return Some(&file.bytes);
     }
+
+    None
 }
 
 pub fn place_item(pixmap: &mut [u32], data: Data) -> Result<()> {
