@@ -79,6 +79,7 @@ define_config! {
     disable_printer: bool = false,
     save_path: String = "saves/".to_string(),
     max_size: f64 = 100.0,
+    test_text: bool = false,
 }
 
 impl Config {

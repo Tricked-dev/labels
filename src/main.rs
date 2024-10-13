@@ -6,11 +6,11 @@ use std::{env, thread};
 
 use ai::text_to_data;
 use circe::Client;
-use color_eyre::eyre::{anyhow, Error};
+use color_eyre::eyre::anyhow;
 use color_eyre::Result;
 use drawing::{draw_text, fallback_parser, place_item, Data};
 use humantime::format_rfc3339;
-use image_webp::{ColorType, WebPDecoder, WebPEncoder};
+use image_webp::{ColorType, WebPEncoder};
 use minifb::{Key, Scale, Window, WindowOptions};
 use niimbot::{get_usb_adapter, NiimbotPrinterClient};
 
@@ -282,6 +282,12 @@ fn main() -> Result<()> {
     window.set_target_fps(60);
 
     let mut label_data: Vec<u32> = vec![u32::MAX; CONFIG.width() * CONFIG.height()];
+
+    if CONFIG.test_text {
+        draw_text(&mut label_data, "Hello World", 5, 0, 0)?;
+        draw_text(&mut label_data, ":D [] :/\\*&^%$#@!", 5, 0, 30)?;
+        draw_text(&mut label_data, "More Texty", 5, 0, 90)?;
+    }
 
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
         match rx.try_recv() {

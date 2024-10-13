@@ -31,7 +31,7 @@ use tar_wasi::Archive;
 use crate::CONFIG;
 
 pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
-    let font_data: &[u8] = include_bytes!("../../BerkeleyMonoTrial-Regular.otf");
+    let font_data: &[u8] = include_bytes!("../../Roboto-Regular.ttf");
     let font = FontArc::try_from_slice(font_data)?;
 
     let scale = PxScale::from((12 * size) as f32);

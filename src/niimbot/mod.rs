@@ -1,6 +1,7 @@
+#![allow(dead_code)]
+
 use adapters::{NiimbotPrinterAdapter, UsbAdapter};
 use color_eyre::{eyre::anyhow, Result};
-use serialport::SerialPort;
 use std::{thread::sleep, time::Duration};
 
 pub mod adapters;
