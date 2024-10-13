@@ -233,8 +233,6 @@ fn main() -> Result<()> {
         window.update_with_buffer(&label_data, width as usize, height as usize)?;
     }
 
-    dbg!("Exiting!");
-
     log::debug!("Ending counting thread");
     counting_thread.join().unwrap();
     log::debug!("Ending printer thread");

@@ -255,7 +255,7 @@ impl NiimbotPrinterClient {
             sleep(Duration::from_millis(100));
         }
         log::debug!("End Print");
-        self.end_print()?;
+        // self.end_print()?;
 
         Ok(())
     }

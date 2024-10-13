@@ -86,6 +86,11 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
 }
 
 static IMAGES: LazyLock<Vec<Arc<EfficientEntry>>> = LazyLock::new(|| {
+    if !std::fs::exists("images.tar").unwrap() {
+        log::error!("Image Database not found not running with image support...");
+        return Vec::new();
+    }
+
     let mut file = File::open("images.tar").unwrap();
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).unwrap();
