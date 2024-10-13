@@ -52,6 +52,10 @@ impl NotifyBuilder {
     }
 
     pub fn send(mut self, url: &str) -> Result<()> {
+        if url.is_empty() {
+            log::warn!("No url provided, not sending notification");
+            return Ok(());
+        }
         let mut actions_header = String::new();
         for a in &self.actions {
             let _ = write!(actions_header, "{}, {}, {};", a.action_type, a.title, a.url);
