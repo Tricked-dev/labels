@@ -21,6 +21,7 @@ pub struct Data {
     pub size: u32,
 }
 
+pub mod fallback_parser;
 mod layout_paragraph;
 use ab_glyph::{point, Font, FontArc, PxScale};
 use image_webp::WebPDecoder;

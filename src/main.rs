@@ -7,7 +7,7 @@ use ai::text_to_data;
 use circe::Client;
 use color_eyre::eyre::anyhow;
 use color_eyre::Result;
-use drawing::{place_item, Data};
+use drawing::{fallback_parser, place_item, Data};
 use minifb::{Key, Scale, Window, WindowOptions};
 use niimbot::{get_usb_adapter, NiimbotPrinterClient};
 
@@ -192,9 +192,7 @@ fn main() -> Result<()> {
 
                 match line {
                     circe::commands::Command::PRIVMSG(nick, channel, message) => {
-                        let analysis = Censor::from_str(
-                            "Hello World testing this should be very safe jij bent slim you are smart",
-                        )
+                        let analysis = Censor::from_str(&message)
                             .with_censor_threshold(Type::INAPPROPRIATE)
                             .with_censor_first_character_threshold(Type::OFFENSIVE & Type::SEVERE)
                             .with_ignore_false_positives(false)
@@ -214,7 +212,17 @@ fn main() -> Result<()> {
                             );
                         } else {
                             log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
-                            tx.send(UICommand::Draw(text_to_data(&message)?))?;
+                            let mut result = text_to_data(&message)?;
+                            if result.text.is_empty() {
+                                log::debug!("AI could not parse text, trying fallback parser");
+                                if let Some(data) = fallback_parser::parse_string(&message) {
+                                    log::debug!("Fallback parser parsed text result: {:?}", data);
+                                    result = data;
+                                } else {
+                                    log::debug!("Fallback parser failed to parse text");
+                                }
+                            }
+                            tx.send(UICommand::Draw(result))?;
                         }
                     }
                     circe::commands::Command::QUIT(message) => {
