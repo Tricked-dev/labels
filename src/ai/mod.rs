@@ -32,9 +32,9 @@ pub fn parse_json_to_data(json: &str) -> Option<Data> {
 
     let data = Data {
         text: rest_text.clone(),
-        x: *x as u32,
-        y: *y as u32,
-        size: *size as u32,
+        x: (*x).min(CONFIG.width) as u32,
+        y: (*y).min(CONFIG.height) as u32,
+        size: (*size).min(CONFIG.max_size) as u32,
     };
     Some(data)
 }

@@ -78,6 +78,7 @@ define_config! {
     timer_prefix: String = "printing starts in: ".to_string(),
     disable_printer: bool = false,
     save_path: String = "saves/".to_string(),
+    max_size: f64 = 100.0,
 }
 
 impl Config {
