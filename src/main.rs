@@ -104,7 +104,9 @@ fn main() -> Result<()> {
             Ok(())
         };
         let out: Result<()> = printer_task();
-
+        if CONFIG.disable_printer {
+            return;
+        }
         running_thread.store(false, Ordering::Relaxed);
         tx.send(UICommand::Quit).ok();
         if let Err(e) = out {
@@ -162,6 +164,7 @@ fn main() -> Result<()> {
             Ok(())
         };
         let out: Result<()> = result();
+
         running_thread.store(false, Ordering::Relaxed);
         tx.send(UICommand::Quit).ok();
         if let Err(e) = out {
@@ -186,6 +189,16 @@ fn main() -> Result<()> {
             } else {
                 iter += 1;
             }
+            let time_left = count - iter;
+            let time_left_str = format!(
+                "{}{:02}:{:02}",
+                CONFIG.timer_prefix,
+                time_left / 60,
+                time_left % 60
+            );
+
+            std::fs::write(&CONFIG.timer_file, time_left_str).ok();
+
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     });

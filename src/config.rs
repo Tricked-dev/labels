@@ -73,7 +73,10 @@ define_config! {
     width: f64 = 500.0,
     height: f64 = 500.0,
     notify_url: String = String::new(),
-    clock_time: f64 = 60.0 * 5.0
+    clock_time: f64 = 60.0 * 5.0,
+    timer_file: String = "timer.txt".to_string(),
+    timer_prefix: String = "printing starts in: ".to_string(),
+    disable_printer: bool = false,
 }
 
 impl Config {
