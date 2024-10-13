@@ -33,8 +33,11 @@ fn test_parsing() {
         "test 30,40,20",
         "hi 50,60,10",
         "example 70,80,200",
-        "another test 100,150", // Should default to size = 5
-        "missing size number",  // Should fail to parse
+        "another test 100,150",
+        "missing size number",
+        "ayo what 10,10,9",
+        "TT 10,10",
+        "omg 20,20",
     ];
 
     for &test_case in &test_cases {

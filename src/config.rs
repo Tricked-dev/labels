@@ -77,6 +77,7 @@ define_config! {
     timer_file: String = "timer.txt".to_string(),
     timer_prefix: String = "printing starts in: ".to_string(),
     disable_printer: bool = false,
+    save_path: String = "saves/".to_string(),
 }
 
 impl Config {

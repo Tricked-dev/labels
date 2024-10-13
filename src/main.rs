@@ -1,13 +1,16 @@
+use std::fs::{create_dir_all, File};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, LazyLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use std::{env, thread};
 
 use ai::text_to_data;
 use circe::Client;
-use color_eyre::eyre::anyhow;
+use color_eyre::eyre::{anyhow, Error};
 use color_eyre::Result;
-use drawing::{fallback_parser, place_item, Data};
+use drawing::{draw_text, fallback_parser, place_item, Data};
+use humantime::format_rfc3339;
+use image_webp::{ColorType, WebPDecoder, WebPEncoder};
 use minifb::{Key, Scale, Window, WindowOptions};
 use niimbot::{get_usb_adapter, NiimbotPrinterClient};
 
@@ -212,6 +215,7 @@ fn main() -> Result<()> {
                             );
                         } else {
                             log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
+                            log::debug!("{}", message);
                             let mut result = text_to_data(&message)?;
                             if result.text.is_empty() {
                                 log::debug!("AI could not parse text, trying fallback parser");
@@ -277,11 +281,58 @@ fn main() -> Result<()> {
     window.set_target_fps(60);
 
     let mut label_data: Vec<u32> = vec![u32::MAX; CONFIG.width() * CONFIG.height()];
-
+    draw_text(&mut label_data, "Hello world", 5, 0, 0);
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
         match rx.try_recv() {
             Ok(UICommand::Clear) => {
-                if label_data.iter().any(|&v| v != u32::MAX)
+                let is_not_full_white = label_data.iter().any(|&v| v != u32::MAX);
+                let label_data_clone: Vec<u32> = label_data.clone();
+                if is_not_full_white {
+                    std::thread::spawn(move || {
+                        let result = || {
+                            let mut img_data: Vec<u8> =
+                                Vec::with_capacity((width * height) as usize);
+
+                            for &pixel in &label_data_clone {
+                                let value = if pixel == u32::MAX { 255 } else { 0 };
+                                img_data.push(value);
+                            }
+
+                            let now = SystemTime::now();
+                            create_dir_all(&CONFIG.save_path).ok();
+                            let file_path =
+                                format!("{}/{}.webp", CONFIG.save_path, format_rfc3339(now));
+
+                            let file = File::create(file_path)?;
+
+                            let encoder = WebPEncoder::new(file);
+                            encoder.encode(
+                                &img_data,
+                                CONFIG.width as u32,
+                                CONFIG.height as u32,
+                                ColorType::L8,
+                            )?;
+                            Ok(())
+                        };
+
+                        let data: Result<()> = result();
+
+                        if let Err(e) = data {
+                            log::error!("Failed to save WebP image: {:?}", e);
+                            if !CONFIG.notify_url.is_empty() {
+                                ntfy::NotifyBuilder::new(format!(
+                                    "Failed to save WebP image: {:?}",
+                                    e
+                                ))
+                                .set_priority("low".to_owned())
+                                .send(&CONFIG.notify_url)
+                                .ok();
+                            }
+                        }
+                    });
+                }
+
+                if is_not_full_white
                     && printer_tx
                         .send(PrinterCommand::Print(label_data.clone()))
                         .is_err()
