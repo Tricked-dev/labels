@@ -195,7 +195,8 @@ fn main() -> Result<()> {
 
                 match line {
                     circe::commands::Command::PRIVMSG(nick, channel, message) => {
-                        let analysis = Censor::from_str(&message)
+                        let message = message.trim();
+                        let analysis = Censor::from_str(message)
                             .with_censor_threshold(Type::INAPPROPRIATE)
                             .with_censor_first_character_threshold(Type::OFFENSIVE & Type::SEVERE)
                             .with_ignore_false_positives(false)
@@ -216,10 +217,10 @@ fn main() -> Result<()> {
                         } else {
                             log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
                             log::debug!("{}", message);
-                            let mut result = text_to_data(&message)?;
+                            let mut result = text_to_data(message)?;
                             if result.text.is_empty() {
                                 log::debug!("AI could not parse text, trying fallback parser");
-                                if let Some(data) = fallback_parser::parse_string(&message) {
+                                if let Some(data) = fallback_parser::parse_string(message) {
                                     log::debug!("Fallback parser parsed text result: {:?}", data);
                                     result = data;
                                 } else {
@@ -281,7 +282,7 @@ fn main() -> Result<()> {
     window.set_target_fps(60);
 
     let mut label_data: Vec<u32> = vec![u32::MAX; CONFIG.width() * CONFIG.height()];
-    draw_text(&mut label_data, "Hello world", 5, 0, 0);
+
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
         match rx.try_recv() {
             Ok(UICommand::Clear) => {
