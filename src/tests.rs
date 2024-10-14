@@ -5,7 +5,7 @@
 // };
 use color_eyre::Result;
 
-use crate::niimbot::{get_usb_adapter, NiimbotPrinterClient};
+use niimbot::{get_usb_adapter, NiimbotPrinterClient};
 
 #[test]
 fn test_shutdowns() -> Result<()> {

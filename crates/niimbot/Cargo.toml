@@ -1,0 +1,10 @@
+[package]
+name = "niimbot"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+color-eyre.workspace = true
+log.workspace = true
+rusb.workspace = true
+serialport.workspace = true

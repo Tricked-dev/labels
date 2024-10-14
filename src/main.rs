@@ -15,11 +15,8 @@ use minifb::{Key, Scale, Window, WindowOptions};
 use niimbot::{get_usb_adapter, NiimbotPrinterClient};
 
 mod ai;
-mod circe;
 mod config;
 mod drawing;
-mod niimbot;
-mod ntfy;
 
 #[cfg(test)]
 mod tests;

@@ -230,9 +230,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bindgen"
-version = "0.69.4"
+version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a00dc851838a2120612785d195287475a3ac45514741da670b735818822129a0"
+checksum = "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088"
 dependencies = [
  "bitflags 2.6.0",
  "cexpr",
@@ -346,6 +346,16 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "circe"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "log",
+ "rustls 0.23.14",
+ "rustls-native-certs",
+]
 
 [[package]]
 name = "clang-sys"
@@ -1003,17 +1013,16 @@ dependencies = [
  "ab_glyph",
  "attohttpc",
  "bytes",
+ "circe",
  "color-eyre",
  "env_logger",
  "humantime",
  "image-webp 0.2.0",
  "log",
  "minifb",
- "rusb",
- "rustls 0.23.14",
- "rustls-native-certs",
+ "niimbot",
+ "ntfy",
  "rustrict",
- "serialport",
  "tar-wasi",
  "tinyjson",
 ]
@@ -1276,6 +1285,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "niimbot"
+version = "0.1.0"
+dependencies = [
+ "color-eyre",
+ "log",
+ "rusb",
+ "serialport",
+]
+
+[[package]]
 name = "nix"
 version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1301,6 +1320,15 @@ name = "noop_proc_macro"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0676bb32a98c1a483ce53e500a81ad9c3d5b3f7c920c28c24e9cb0980d0b5bc8"
+
+[[package]]
+name = "ntfy"
+version = "0.1.0"
+dependencies = [
+ "attohttpc",
+ "color-eyre",
+ "log",
+]
 
 [[package]]
 name = "num-bigint"
@@ -1898,9 +1926,9 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
 name = "schannel"
-version = "0.1.24"
+version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9aaafd5a2b6e3d657ff009d82fbd630b6bd54dd4eb06f21693925cdf80f9b8b"
+checksum = "01227be5826fa0690321a2ba6c5cd57a19cf3f6a09e76973b58e61de6ab9d1c1"
 dependencies = [
  "windows-sys 0.59.0",
 ]

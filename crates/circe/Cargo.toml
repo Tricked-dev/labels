@@ -1,0 +1,10 @@
+[package]
+name = "circe"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log.workspace = true
+color-eyre.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
