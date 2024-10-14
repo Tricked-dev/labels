@@ -3,7 +3,21 @@
 //     niimbot::{get_usb_adapter, NiimbotPrinterClient},
 //     CONFIG,
 // };
-// use color_eyre::Result;
+use color_eyre::Result;
+
+use crate::niimbot::{get_usb_adapter, NiimbotPrinterClient};
+
+#[test]
+fn test_shutdowns() -> Result<()> {
+    std::env::set_var("RUST_LOG", "debug");
+    env_logger::init();
+    let mut printer = NiimbotPrinterClient::new(Box::new(get_usb_adapter()?))?;
+    printer.heartbeat()?;
+
+    printer.set_autoshutdown_time(1)?;
+
+    Ok(())
+}
 
 // #[test]
 // fn main() -> Result<()> {

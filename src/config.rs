@@ -80,6 +80,7 @@ define_config! {
     save_path: String = "saves/".to_string(),
     max_size: f64 = 100.0,
     test_text: bool = false,
+    set_shutdown_timer: f64 = 0.0,
 }
 
 impl Config {
@@ -89,5 +90,9 @@ impl Config {
 
     pub fn width(&self) -> usize {
         (self.width) as usize
+    }
+
+    pub fn get_shutdown_time(&self) -> u8 {
+        self.set_shutdown_timer.round().clamp(0.0, 4.0) as u8
     }
 }

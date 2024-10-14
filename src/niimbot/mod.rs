@@ -156,6 +156,7 @@ impl NiimbotPrinterClient {
                 && packet_buffer.ends_with(&end_bytes)
             {
                 if let Ok(packet) = NiimbotPacket::from_bytes(&packet_buffer) {
+                    log::debug!("Packet Received {:?}", packet);
                     packets.push(packet);
                     packet_buffer.clear(); // Reset for the next packet
                 } else {
@@ -318,6 +319,10 @@ impl NiimbotPrinterClient {
 
     fn set_quantity(&mut self, quantity: u8) -> Result<()> {
         self.transceive(21, &[quantity], 1).map(|_| ())
+    }
+
+    pub fn set_autoshutdown_time(&mut self, time: u8) -> Result<()> {
+        self.transceive(0x27, &[time], 0x37 - 0x27).map(|_| ())
     }
 
     pub fn get_print_status(

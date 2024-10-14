@@ -45,9 +45,10 @@ fn main() -> Result<()> {
         env::set_var("RUST_LOG", "debug");
     }
 
+    env_logger::init();
+
     let running = Arc::new(AtomicBool::new(true));
 
-    env_logger::init();
     dbg!(&*CONFIG);
     let width = CONFIG.width;
     let height = CONFIG.height;
@@ -81,6 +82,10 @@ fn main() -> Result<()> {
         let mut printer_task = || {
             let mut printer = NiimbotPrinterClient::new(Box::new(get_usb_adapter()?))?;
             printer.heartbeat()?;
+
+            if CONFIG.get_shutdown_time() != 0 {
+                printer.set_autoshutdown_time(CONFIG.get_shutdown_time())?;
+            }
 
             let mut hb_failures = 0;
 
