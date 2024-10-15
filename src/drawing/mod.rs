@@ -62,12 +62,21 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
 
     let w = CONFIG.width as u32;
 
+    let mut x_offset: i32 = 0;
+    let mut y_offset: i32 = 0;
     for glyph in outlined {
         let bounds = glyph.px_bounds();
         let img_left = bounds.min.x as u32 - all_px_bounds.min.x as u32;
         let img_top = bounds.min.y as u32 - all_px_bounds.min.y as u32;
         glyph.draw(|x, y, v| {
-            let pos = (img_left + x + posx) as usize + (img_top + y + posy) as usize * w as usize;
+            let x_loc = (img_left + x + posx) as i32 + x_offset;
+            let y_loc = (img_top + y + posy) as i32 + y_offset;
+            if x_loc + bounds.width() as i32 > CONFIG.width as i32 {
+                log::debug!("Glyph is too wide, wrapping");
+                x_offset -= CONFIG.width as i32 - posx as i32;
+                y_offset += ((bounds.max.y - bounds.min.y) * 1.2) as i32;
+            }
+            let pos = ((x_loc) + (y_loc) * w as i32) as usize;
 
             if pixmap.get(pos).is_none() {
                 return;
@@ -75,11 +84,13 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
 
             let write = v > 0.5;
             if !write {
-                // pixmap.pixels_mut()[pos] = *BG;
                 return;
             }
-
-            pixmap[pos] = u32::MIN;
+            if pixmap[pos] == u32::MAX {
+                pixmap[pos] = u32::MIN;
+            } else {
+                pixmap[pos] = u32::MAX;
+            }
         });
     }
 

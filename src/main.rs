@@ -289,6 +289,13 @@ fn main() -> Result<()> {
         draw_text(&mut label_data, "Hello World", 5, 0, 0)?;
         draw_text(&mut label_data, ":D [] :/\\*&^%$#@!", 5, 0, 30)?;
         draw_text(&mut label_data, "More Texty", 5, 0, 90)?;
+        draw_text(
+            &mut label_data,
+            "This text should wrap if my code works perfectly fine!",
+            5,
+            20,
+            140,
+        )?;
     }
 
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {

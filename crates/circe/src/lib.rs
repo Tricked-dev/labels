@@ -23,7 +23,6 @@
 //!     # Ok(())
 //! }
 
-#![warn(missing_docs)]
 #![allow(clippy::too_many_lines)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(dead_code)]
