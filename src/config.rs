@@ -21,7 +21,7 @@ macro_rules! define_config {
 
         impl Config {
             pub fn load() -> Self {
-                let  config = Config::default();
+                let config = Config::default();
                 let parsed: HashMap<String, JsonValue> = Self::load_json_config();
 
                 $(
@@ -35,6 +35,21 @@ macro_rules! define_config {
 
                 config.validate();
                 config
+            }
+
+            pub fn reload(&self) {
+                let parsed: HashMap<String, JsonValue> = Self::load_json_config();
+
+                $(
+                    let key = stringify!($field);
+                    if let Ok(value) = env::var(key.to_uppercase()) {
+                        *self.$field.write().unwrap() = value.parse().unwrap_or_else(|_| $default);
+                    } else if let Some(value) = parsed.get(key) {
+                        *self.$field.write().unwrap() = value.get().cloned().unwrap_or_else(|| $default);
+                    }
+                )+
+
+                self.validate();
             }
 
             fn load_json_config() -> HashMap<String, JsonValue> {
@@ -56,6 +71,10 @@ macro_rules! define_config {
                 }
                 if self.irc_username.read().unwrap().is_empty() {
                     panic!("No IRC username found");
+                }
+
+                if std::fs::metadata(&self.font_file()).is_err() {
+                    log::error!("Font file not found, please check if {} exists", self.font_file());
                 }
             }
 
@@ -93,6 +112,7 @@ define_config! {
     censoring_enabled: bool = true,
     invert_overlapping_text: bool = true,
     i_like_rgb: bool = false,
+    font_file: String = "Roboto-Regular.ttf".to_string(),
 }
 
 impl Config {

@@ -30,20 +30,22 @@ use tar_wasi::Archive;
 
 use crate::CONFIG;
 
-pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
-    let font_data: &[u8] = include_bytes!("../../Roboto-Regular.ttf");
-    let font = FontArc::try_from_slice(font_data)?;
+static FONT: LazyLock<FontArc> = LazyLock::new(|| {
+    let font_data = std::fs::read(CONFIG.font_file()).unwrap();
+    FontArc::try_from_vec(font_data).unwrap()
+});
 
+pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32) -> Result<()> {
     let scale = PxScale::from((12 * size) as f32);
 
-    let scaled_font = font.as_scaled(scale);
+    let scaled_font = FONT.as_scaled(scale);
 
     let mut glyphs = Vec::new();
     layout_paragraph(scaled_font, point(20.0, 20.0), 9999.0, text, &mut glyphs);
 
     let outlined: Vec<_> = glyphs
         .into_iter()
-        .filter_map(|g| font.outline_glyph(g))
+        .filter_map(|g| FONT.outline_glyph(g))
         .collect();
 
     let Some(all_px_bounds) = outlined
