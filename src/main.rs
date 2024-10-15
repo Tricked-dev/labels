@@ -1,7 +1,9 @@
+#![feature(duration_millis_float)]
+
 use std::fs::{create_dir_all, File};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, LazyLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{env, thread};
 
 use ai::text_to_data;
@@ -226,6 +228,11 @@ fn main() -> Result<()> {
                             } else {
                                 text_to_data(message)?
                             };
+
+                            if message == "rgb" {
+                                let rgb = CONFIG.i_like_rgb();
+                                *CONFIG.i_like_rgb.write().unwrap() = !rgb;
+                            }
                             // no openai api key tax i guess lol
                             if result.text.is_empty() {
                                 log::debug!("AI could not parse text, trying fallback parser");
@@ -305,6 +312,7 @@ fn main() -> Result<()> {
         )?;
     }
 
+    let start_time = Instant::now();
     while window.is_open() && !window.is_key_down(Key::Escape) && running.load(Ordering::Relaxed) {
         match rx.try_recv() {
             Ok(UICommand::Clear) => {
@@ -382,7 +390,30 @@ fn main() -> Result<()> {
             Err(..) => {}
         }
 
-        window.update_with_buffer(&label_data, width as usize, height as usize)?;
+        if CONFIG.i_like_rgb() {
+            let elapsed = start_time.elapsed().as_millis_f32() / 2000.0;
+            let mut buffer = label_data.clone();
+            for (i, pixel) in buffer.iter_mut().enumerate() {
+                let x = (i % (width as usize)) as f32;
+                let y = (i / (width as usize)) as f32;
+
+                let offset = x + y * 0.1; // Offset calculation based on pixel position
+                let time = elapsed * 2.0; // Adjust speed here (higher value = faster)
+
+                // Apply wave effect for smooth color transitions
+                let red = (128.0 * (1.0 + (time + offset / 30.0).sin())) as u8;
+                let green = (128.0 * (1.0 + ((time + offset / 15.0) * 1.2).sin())) as u8;
+                let blue = (128.0 * (1.0 + ((time + offset / 5.0) * 1.5).cos())) as u8;
+
+                // Combine RGB values into a single u32 pixel
+                if pixel != &u32::MAX {
+                    *pixel = ((red as u32) << 16) | ((green as u32) << 8) | (blue as u32);
+                }
+            }
+            window.update_with_buffer(&buffer, width as usize, height as usize)?;
+        } else {
+            window.update_with_buffer(&label_data, width as usize, height as usize)?;
+        }
     }
 
     log::debug!("Ending counting thread");

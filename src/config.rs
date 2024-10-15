@@ -92,6 +92,7 @@ define_config! {
     set_shutdown_timer: f64 = 0.0,
     censoring_enabled: bool = true,
     invert_overlapping_text: bool = true,
+    i_like_rgb: bool = false,
 }
 
 impl Config {
