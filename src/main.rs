@@ -47,8 +47,8 @@ fn main() -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
 
     dbg!(&*CONFIG);
-    let width = CONFIG.width;
-    let height = CONFIG.height;
+    let width = CONFIG.width();
+    let height = CONFIG.height();
 
     let mut window = Window::new(
         "H",
@@ -111,8 +111,8 @@ fn main() -> Result<()> {
                         PrinterCommand::Print(data) => {
                             if let Err(printer_e) = printer.print_label(
                                 &data,
-                                CONFIG.width as usize,
-                                CONFIG.height as usize,
+                                CONFIG.width() as usize,
+                                CONFIG.height() as usize,
                                 1,
                                 1,
                                 5,
@@ -150,16 +150,16 @@ fn main() -> Result<()> {
             Ok(())
         };
         let out: Result<()> = printer_task();
-        if CONFIG.disable_printer {
+        if CONFIG.disable_printer() {
             return;
         }
         running_thread.store(false, Ordering::Relaxed);
         tx.send(UICommand::Quit).ok();
         if let Err(e) = out {
             log::error!("Error in printer thread: {:?}", e);
-            if !CONFIG.notify_url.is_empty() {
+            if !CONFIG.notify_url().is_empty() {
                 ntfy::NotifyBuilder::new(format!("Error in printer thread: {:?}", e))
-                    .send(&CONFIG.notify_url)
+                    .send(&CONFIG.notify_url())
                     .expect("Failed to send notification");
             }
         }
@@ -174,14 +174,14 @@ fn main() -> Result<()> {
 
         let result = || {
             let mut client = Client::new(circe::Config {
-                channels: vec![CONFIG.irc_channel.clone()],
-                host: CONFIG.irc_host.clone(),
-                port: CONFIG.irc_port as u16,
-                username: CONFIG.irc_username.clone(),
+                channels: vec![CONFIG.irc_channel()],
+                host: CONFIG.irc_host(),
+                port: CONFIG.irc_port() as u16,
+                username: CONFIG.irc_username(),
                 ..Default::default()
             })?;
 
-            client.write_command(circe::commands::Command::PASS(CONFIG.irc_token.clone()))?;
+            client.write_command(circe::commands::Command::PASS(CONFIG.irc_token()))?;
             client.identify()?;
 
             // client.privmsg(&CONFIG.irc_channel, ":Hello, world!")?;
@@ -205,9 +205,9 @@ fn main() -> Result<()> {
                             .with_ignore_self_censoring(false)
                             .with_censor_replacement('*')
                             .analyze();
-                        if analysis.is(Type::INAPPROPRIATE) && CONFIG.censoring_enabled {
+                        if analysis.is(Type::INAPPROPRIATE) && CONFIG.censoring_enabled() {
                             client.privmsg(
-                                &CONFIG.irc_channel,
+                                &CONFIG.irc_channel(),
                                 &format!(":Hey {}, i will not print that", nick),
                             )?;
                             log::warn!(
@@ -219,7 +219,7 @@ fn main() -> Result<()> {
                         } else {
                             log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
                             log::debug!("{}", message);
-                            let mut result = if CONFIG.openai_api_key.is_empty() {
+                            let mut result = if CONFIG.openai_api_key().is_empty() {
                                 // yes you will be reminded every time
                                 log::debug!("No openai api key found using fallback parser");
                                 fallback_parser::parse_string(message).unwrap_or_default()
@@ -254,9 +254,9 @@ fn main() -> Result<()> {
         tx.send(UICommand::Quit).ok();
         if let Err(e) = out {
             log::error!("Error in irc thread: {:?}", e);
-            if !CONFIG.notify_url.is_empty() {
+            if !CONFIG.notify_url().is_empty() {
                 ntfy::NotifyBuilder::new(format!("Error in irc thread: {:?}", e))
-                    .send(&CONFIG.notify_url)
+                    .send(&CONFIG.notify_url())
                     .expect("Failed to send notification");
             }
         }
@@ -266,7 +266,7 @@ fn main() -> Result<()> {
 
     let counting_thread = std::thread::spawn(move || {
         let mut iter = 0;
-        let count = CONFIG.clock_time as usize;
+        let count = CONFIG.clock_time() as usize;
         while running_thread.load(Ordering::Relaxed) {
             if iter == count {
                 tx.send(UICommand::Clear).ok();
@@ -277,12 +277,12 @@ fn main() -> Result<()> {
             let time_left = count - iter;
             let time_left_str = format!(
                 "{}{:02}:{:02}",
-                CONFIG.timer_prefix,
+                CONFIG.timer_prefix(),
                 time_left / 60,
                 time_left % 60
             );
 
-            std::fs::write(&CONFIG.timer_file, time_left_str).ok();
+            std::fs::write(&CONFIG.timer_file(), time_left_str).ok();
 
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
@@ -290,9 +290,9 @@ fn main() -> Result<()> {
 
     window.set_target_fps(60);
 
-    let mut label_data: Vec<u32> = vec![u32::MAX; CONFIG.width() * CONFIG.height()];
+    let mut label_data: Vec<u32> = vec![u32::MAX; (CONFIG.width() * CONFIG.height()) as usize];
 
-    if CONFIG.test_text {
+    if CONFIG.test_text() {
         draw_text(&mut label_data, "Hello World", 5, 0, 0)?;
         draw_text(&mut label_data, ":D [] :/\\*&^%$#@!", 5, 0, 30)?;
         draw_text(&mut label_data, "More Texty", 5, 0, 90)?;
@@ -322,17 +322,17 @@ fn main() -> Result<()> {
                             }
 
                             let now = SystemTime::now();
-                            create_dir_all(&CONFIG.save_path).ok();
+                            create_dir_all(&CONFIG.save_path()).ok();
                             let file_path =
-                                format!("{}/{}.webp", CONFIG.save_path, format_rfc3339(now));
+                                format!("{}/{}.webp", CONFIG.save_path(), format_rfc3339(now));
 
                             let file = File::create(file_path)?;
 
                             let encoder = WebPEncoder::new(file);
                             encoder.encode(
                                 &img_data,
-                                CONFIG.width as u32,
-                                CONFIG.height as u32,
+                                CONFIG.width() as u32,
+                                CONFIG.height() as u32,
                                 ColorType::L8,
                             )?;
                             Ok(())
@@ -342,13 +342,13 @@ fn main() -> Result<()> {
 
                         if let Err(e) = data {
                             log::error!("Failed to save WebP image: {:?}", e);
-                            if !CONFIG.notify_url.is_empty() {
+                            if !CONFIG.notify_url().is_empty() {
                                 ntfy::NotifyBuilder::new(format!(
                                     "Failed to save WebP image: {:?}",
                                     e
                                 ))
                                 .set_priority("low".to_owned())
-                                .send(&CONFIG.notify_url)
+                                .send(&CONFIG.notify_url())
                                 .ok();
                             }
                         }
@@ -368,10 +368,10 @@ fn main() -> Result<()> {
             Ok(UICommand::Draw(data)) => {
                 if let Err(e) = place_item(&mut label_data, data) {
                     log::error!("Failed to place item: {:?}", e);
-                    if !CONFIG.notify_url.is_empty() {
+                    if !CONFIG.notify_url().is_empty() {
                         ntfy::NotifyBuilder::new(format!("Failed to place item: {:?}", e))
                             .set_priority("low".to_owned())
-                            .send(&CONFIG.notify_url)?;
+                            .send(&CONFIG.notify_url())?;
                     }
                 }
             }

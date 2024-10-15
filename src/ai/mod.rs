@@ -32,9 +32,9 @@ pub fn parse_json_to_data(json: &str) -> Option<Data> {
 
     let data = Data {
         text: rest_text.clone(),
-        x: (*x).min(CONFIG.width) as u32,
-        y: (*y).min(CONFIG.height) as u32,
-        size: (*size).min(CONFIG.max_size) as u32,
+        x: (*x).min(CONFIG.width()) as u32,
+        y: (*y).min(CONFIG.height()) as u32,
+        size: (*size).min(CONFIG.max_size()) as u32,
     };
     Some(data)
 }
@@ -44,13 +44,13 @@ pub fn text_to_data(text: &str) -> Result<Data> {
         r##"
 {
   "model": ""##,
-        &CONFIG.model,
+        &CONFIG.model(),
         r##"",
   "messages": [
     {
       "role": "system",
       "content": ""##,
-        &CONFIG.prompt,
+        &CONFIG.prompt(),
         r##""
     },
     {
@@ -97,7 +97,7 @@ pub fn text_to_data(text: &str) -> Result<Data> {
         .header("Content-Type", "application/json")
         .header(
             "Authorization",
-            format!("Bearer {}", CONFIG.openai_api_key.clone()),
+            format!("Bearer {}", CONFIG.openai_api_key()),
         )
         .send()?;
 

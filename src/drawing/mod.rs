@@ -60,8 +60,8 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
         return Err(anyhow!("No outlined glyphs?"));
     };
 
-    let w = CONFIG.width as u32;
-
+    let w = CONFIG.width() as u32;
+    let invert_overlapping_text = CONFIG.invert_overlapping_text();
     let mut x_offset: i32 = 0;
     let mut y_offset: i32 = 0;
     for glyph in outlined {
@@ -71,9 +71,9 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
         glyph.draw(|x, y, v| {
             let x_loc = (img_left + x + posx) as i32 + x_offset;
             let y_loc = (img_top + y + posy) as i32 + y_offset;
-            if x_loc + bounds.width() as i32 > CONFIG.width as i32 {
+            if x_loc + bounds.width() as i32 > w as i32 {
                 log::debug!("Glyph is too wide, wrapping");
-                x_offset -= CONFIG.width as i32 - posx as i32;
+                x_offset -= w as i32 - posx as i32;
                 y_offset += ((bounds.max.y - bounds.min.y) * 1.2) as i32;
             }
             let pos = ((x_loc) + (y_loc) * w as i32) as usize;
@@ -86,7 +86,7 @@ pub fn draw_text(pixmap: &mut [u32], text: &str, size: u32, posx: u32, posy: u32
             if !write {
                 return;
             }
-            if pixmap[pos] == u32::MAX {
+            if invert_overlapping_text && pixmap[pos] != u32::MIN {
                 pixmap[pos] = u32::MIN;
             } else {
                 pixmap[pos] = u32::MAX;
@@ -160,8 +160,8 @@ fn draw_image(pixmap: &mut [u32], image: &Bytes, size: u32, posx: u32, posy: u32
     // let scaled_width = width * size;
     // let scaled_height = height * size;
 
-    let pixmap_width = CONFIG.width as u32;
-    let pixmap_height = CONFIG.height as u32;
+    let pixmap_width = CONFIG.width() as u32;
+    let pixmap_height = CONFIG.height() as u32;
 
     for y in 0..height {
         for x in 0..width {

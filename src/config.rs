@@ -1,3 +1,4 @@
+use std::sync::RwLock;
 use std::{collections::HashMap, env};
 use tinyjson::JsonValue;
 
@@ -7,28 +8,28 @@ macro_rules! define_config {
     ),+ $(,)?) => {
         #[derive(Debug)]
         pub struct Config {
-            $(pub $field: $type),+
+            $(pub $field: RwLock<$type>),+
         }
 
         impl Default for Config {
             fn default() -> Self {
                 Self {
-                    $($field: $default),+
+                    $($field: RwLock::new($default)),+
                 }
             }
         }
 
         impl Config {
             pub fn load() -> Self {
-                let mut config = Config::default();
+                let  config = Config::default();
                 let parsed: HashMap<String, JsonValue> = Self::load_json_config();
 
                 $(
                     let key = stringify!($field);
                     if let Ok(value) = env::var(key.to_uppercase()) {
-                        config.$field = value.parse().unwrap_or(config.$field);
+                        *config.$field.write().unwrap() = value.parse().unwrap_or_else(|_| $default);
                     } else if let Some(value) = parsed.get(key) {
-                        config.$field = value.get().cloned().unwrap_or(config.$field);
+                        *config.$field.write().unwrap() = value.get().cloned().unwrap_or_else(|| $default);
                     }
                 )+
 
@@ -46,17 +47,24 @@ macro_rules! define_config {
             }
 
             fn validate(&self) {
-                if self.openai_api_key.is_empty() {
+                if self.openai_api_key.read().unwrap().is_empty() {
                     log::error!("NO openai api key found using fallback parser");
                     log::info!("I would strongly advice you set a openai_api_key in config.json or parsing will be very bad");
                 }
-                if self.irc_token.is_empty() {
+                if self.irc_token.read().unwrap().is_empty() {
                     panic!("No IRC token found");
                 }
-                if self.irc_username.is_empty() {
+                if self.irc_username.read().unwrap().is_empty() {
                     panic!("No IRC username found");
                 }
             }
+
+            // Getter and Setter methods
+            $(
+                pub fn $field(&self) -> $type {
+                    self.$field.read().unwrap().clone()
+                }
+            )+
         }
     };
 }
@@ -83,18 +91,15 @@ define_config! {
     test_text: bool = false,
     set_shutdown_timer: f64 = 0.0,
     censoring_enabled: bool = true,
+    invert_overlapping_text: bool = true,
 }
 
 impl Config {
-    pub fn height(&self) -> usize {
-        (self.height) as usize
-    }
-
-    pub fn width(&self) -> usize {
-        (self.width) as usize
-    }
-
     pub fn get_shutdown_time(&self) -> u8 {
-        self.set_shutdown_timer.round().clamp(0.0, 4.0) as u8
+        self.set_shutdown_timer
+            .read()
+            .unwrap()
+            .round()
+            .clamp(0.0, 4.0) as u8
     }
 }

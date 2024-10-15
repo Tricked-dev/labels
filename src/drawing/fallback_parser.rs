@@ -18,9 +18,9 @@ pub fn parse_string(input: &str) -> Option<Data> {
             ) {
                 return Some(Data {
                     text: text.to_string(),
-                    x: x.min(CONFIG.width as u32),
-                    y: y.min(CONFIG.height as u32),
-                    size: size.min(CONFIG.max_size as u32),
+                    x: x.min(CONFIG.width() as u32),
+                    y: y.min(CONFIG.height() as u32),
+                    size: size.min(CONFIG.max_size() as u32),
                 });
             }
         }
