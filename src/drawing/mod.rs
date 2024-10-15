@@ -13,7 +13,7 @@ pub struct EfficientEntry {
     pub bytes: Bytes,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Data {
     pub text: String,
     pub x: u32,

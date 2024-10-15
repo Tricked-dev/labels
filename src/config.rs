@@ -47,7 +47,8 @@ macro_rules! define_config {
 
             fn validate(&self) {
                 if self.openai_api_key.is_empty() {
-                    panic!("No OpenAI API key found");
+                    log::error!("NO openai api key found using fallback parser");
+                    log::info!("I would strongly advice you set a openai_api_key in config.json or parsing will be very bad");
                 }
                 if self.irc_token.is_empty() {
                     panic!("No IRC token found");
@@ -81,6 +82,7 @@ define_config! {
     max_size: f64 = 100.0,
     test_text: bool = false,
     set_shutdown_timer: f64 = 0.0,
+    censoring_enabled: bool = true,
 }
 
 impl Config {

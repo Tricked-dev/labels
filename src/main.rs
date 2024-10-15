@@ -205,7 +205,7 @@ fn main() -> Result<()> {
                             .with_ignore_self_censoring(false)
                             .with_censor_replacement('*')
                             .analyze();
-                        if analysis.is(Type::INAPPROPRIATE) {
+                        if analysis.is(Type::INAPPROPRIATE) && CONFIG.censoring_enabled {
                             client.privmsg(
                                 &CONFIG.irc_channel,
                                 &format!(":Hey {}, i will not print that", nick),
@@ -219,7 +219,14 @@ fn main() -> Result<()> {
                         } else {
                             log::info!("PRIVMSG received from {}: {} {}", nick, channel, message);
                             log::debug!("{}", message);
-                            let mut result = text_to_data(message)?;
+                            let mut result = if CONFIG.openai_api_key.is_empty() {
+                                // yes you will be reminded every time
+                                log::debug!("No openai api key found using fallback parser");
+                                fallback_parser::parse_string(message).unwrap_or_default()
+                            } else {
+                                text_to_data(message)?
+                            };
+                            // no openai api key tax i guess lol
                             if result.text.is_empty() {
                                 log::debug!("AI could not parse text, trying fallback parser");
                                 if let Some(data) = fallback_parser::parse_string(message) {
